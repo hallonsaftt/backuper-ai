@@ -22,7 +22,8 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
 
   const dests = ov.dests.some((d) => d.label === "ClaudeBackups") ? ov.dests : [{ label: "ClaudeBackups", path: defDest, path_tilde: "~/ClaudeBackups", free: 0, kind: "home" }, ...ov.dests];
   const inProtected = PROTECTED.some((p) => dest.startsWith(ov.home + p));
-  const dirty = !st.enabled || st.freq !== freq || st.hour !== hour || st.minute !== minute || st.dest !== dest || st.keep !== keep;
+  const byApp = !st.enabled || st.program === ov.app_path;
+  const dirty = !byApp || !st.enabled || st.freq !== freq || st.hour !== hour || st.minute !== minute || st.dest !== dest || st.keep !== keep;
 
   const save = async () => {
     setBusy(true);
@@ -114,6 +115,14 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
           </div>
         )}
       </div>
+
+      {st.enabled && !byApp && (
+        <div className="rise mb-6" style={rise(1)}>
+          <Callout tone="info" title={/python/i.test(st.program) ? "Ovo zakazivanje trenutno pokreće Python skripta" : "Ovo zakazivanje pokreće drugi program"}>
+            <span className="mono">{st.program}</span>. Klikni „Prebaci na aplikaciju” dole — ista podešavanja, samo će backup praviti ova aplikacija. Skripta ostaje gde jeste i može i dalje ručno.
+          </Callout>
+        </div>
+      )}
 
       {msg && (
         <div className="mb-6">
@@ -207,7 +216,7 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
 
       <div className="flex justify-end gap-3">
         <button className="btn btn-primary btn-lg" onClick={save} disabled={busy || !dirty || (!ov.app_in_applications && ov.is_mac)}>
-          <CalendarClock size={18} /> {st.enabled ? "Sačuvaj izmene" : "Uključi automatski backup"}
+          <CalendarClock size={18} /> {!st.enabled ? "Uključi automatski backup" : byApp ? "Sačuvaj izmene" : "Prebaci na aplikaciju"}
         </button>
       </div>
     </div>
