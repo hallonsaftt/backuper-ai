@@ -1,0 +1,8 @@
+# build
+target/
+core/target/
+src-tauri/target/
+node_modules/
+dist/
+*.dmg
+.DS_Store
