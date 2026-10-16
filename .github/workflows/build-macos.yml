@@ -1,0 +1,101 @@
+name: macOS build (Apple Silicon)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    env:
+      DMG_NAME: Claude-Backup-AppleSilicon.dmg
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core
+            src-tauri
+
+      - name: npm ci
+        shell: bash
+        run: npm ci 2>&1 | tee -a build.log
+
+      - name: Testovi jezgra
+        shell: bash
+        run: cargo test --manifest-path core/Cargo.toml 2>&1 | tee -a build.log
+
+      - name: Build .app i .dmg
+        shell: bash
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles app,dmg 2>&1 | tee -a build.log
+
+      - name: Provera paketa
+        shell: bash
+        run: |
+          set -x
+          B=src-tauri/target/aarch64-apple-darwin/release/bundle
+          ls -la "$B/macos" "$B/dmg" 2>&1 | tee -a build.log
+          APP="$B/macos/Claude Backup.app"
+          file "$APP/Contents/MacOS/claude-backup" | tee -a build.log
+          codesign -dv --verbose=2 "$APP" 2>&1 | tee -a build.log
+          # CLI režim iste aplikacije mora da radi bez prozora
+          "$APP/Contents/MacOS/claude-backup" --version 2>&1 | tee -a build.log
+          "$APP/Contents/MacOS/claude-backup" --list 2>&1 | head -20 | tee -a build.log
+          cp "$B"/dmg/*.dmg "$DMG_NAME"
+          shasum -a 256 "$DMG_NAME" | tee -a build.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DMG_NAME }}
+          path: ${{ env.DMG_NAME }}
+          if-no-files-found: error
+
+      - name: GitHub Release (latest)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --cleanup-tag -y 2>/dev/null || true
+          git push origin :refs/tags/latest 2>/dev/null || true
+          gh release create latest "$DMG_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "Claude Backup — najnovija verzija" \
+            --notes "Build iz ${GITHUB_SHA::7}. Za Mac sa Apple Silicon čipom (M1–M4). Uputstvo za instalaciju je u README.md." \
+            --latest 2>&1 | tee -a build.log
+
+      - name: Status u granu ci-status
+        if: always()
+        shell: bash
+        run: |
+          D=$(mktemp -d)
+          cp build.log "$D/" 2>/dev/null || echo "nema build.log" > "$D/build.log"
+          {
+            echo "status=${{ job.status }}"
+            echo "sha=${GITHUB_SHA}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            date -u
+          } > "$D/STATUS"
+          cd "$D"
+          git init -q -b ci-status
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "CI ${GITHUB_SHA::7}: ${{ job.status }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-status
