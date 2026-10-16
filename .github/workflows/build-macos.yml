@@ -75,16 +75,17 @@ jobs:
           path: ${{ env.DMG_NAME }}
           if-no-files-found: error
 
-      - name: GitHub Release (latest)
+      - name: GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          # stari naziv „latest” se sudara sa GitHub-ovim /releases/latest linkovima
           gh release delete latest --cleanup-tag -y 2>/dev/null || true
-          git push origin :refs/tags/latest 2>/dev/null || true
-          gh release create latest "$DMG_NAME" \
+          gh release create "$TAG" "$DMG_NAME" \
             --target "$GITHUB_SHA" \
-            --title "Claude Backup — najnovija verzija" \
+            --title "Claude Backup $TAG" \
             --notes "Build iz ${GITHUB_SHA::7}. Za Mac sa Apple Silicon čipom (M1–M4). Uputstvo za instalaciju je u README.md." \
             --latest 2>&1 | tee -a build.log
 

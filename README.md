@@ -12,7 +12,7 @@ Mac aplikacija (Apple Silicon) koja pravi potpun, proveren backup Claude Code i 
 
 ## Instalacija
 
-1. Skini `Claude-Backup-AppleSilicon.dmg` sa [Releases](../../releases/latest).
+1. Skini [Claude-Backup-AppleSilicon.dmg](https://github.com/hallonsaftt/backuper-ai/releases/latest/download/Claude-Backup-AppleSilicon.dmg) (ili sa stranice [Releases](https://github.com/hallonsaftt/backuper-ai/releases/latest)).
 2. Otvori .dmg i prevuci **Claude Backup** u **Applications**.
 3. Aplikacija nije potpisana Apple sertifikatom, pa je macOS prvi put blokira. Otvori Terminal i pokreni:
    ```
