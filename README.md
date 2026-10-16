@@ -44,10 +44,13 @@ npm ci
 npm run tauri dev            # aplikacija
 npm run dev                  # samo interfejs u pregledaču, sa lažnim podacima
 cargo test --manifest-path core/Cargo.toml
+tests/e2e.sh <putanja do claude-backup> python/claude_backup.py   # E2E na lažnom home folderu
 ```
 
 - `core/` — Rust jezgro (skeniranje, backup, provera, vraćanje, zakazivanje, CLI)
 - `src-tauri/` — Tauri 2 sloj
 - `src/` — React + Tailwind interfejs
+- `python/claude_backup.py` — ista funkcionalnost kao terminal program (TUI), isti format backupa
+- `tests/` — E2E test: backup → provera → vraćanje, uz proveru da izvorni fajlovi nisu dirani
 
 Build za .dmg radi GitHub Actions (`.github/workflows/build-macos.yml`) na svaki push na `main`.

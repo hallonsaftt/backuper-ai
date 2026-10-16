@@ -63,6 +63,12 @@ jobs:
           cp "$B"/dmg/*.dmg "$DMG_NAME"
           shasum -a 256 "$DMG_NAME" | tee -a build.log
 
+      - name: E2E testovi na lažnom home folderu
+        shell: bash
+        run: |
+          python3 --version | tee -a build.log
+          tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a build.log
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.DMG_NAME }}
