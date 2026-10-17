@@ -1,0 +1,194 @@
+name: Build (macOS + Windows)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-14
+    env:
+      DMG_NAME: Claude-Backup-AppleSilicon.dmg
+      LOG: build-macos.log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core
+            src-tauri
+
+      - name: npm ci
+        shell: bash
+        run: npm ci 2>&1 | tee -a "$LOG"
+
+      - name: Testovi jezgra
+        shell: bash
+        run: cargo test --manifest-path core/Cargo.toml 2>&1 | tee -a "$LOG"
+
+      - name: Build .app i .dmg
+        shell: bash
+        run: npm run tauri build -- --target aarch64-apple-darwin --bundles app,dmg 2>&1 | tee -a "$LOG"
+
+      - name: Provera paketa
+        shell: bash
+        run: |
+          B=src-tauri/target/aarch64-apple-darwin/release/bundle
+          APP="$B/macos/Claude Backup.app"
+          file "$APP/Contents/MacOS/claude-backup" | tee -a "$LOG"
+          codesign -dv --verbose=2 "$APP" 2>&1 | tee -a "$LOG"
+          "$APP/Contents/MacOS/claude-backup" --version 2>&1 | tee -a "$LOG"
+          cp "$B"/dmg/*.dmg "$DMG_NAME"
+          shasum -a 256 "$DMG_NAME" | tee -a "$LOG"
+
+      - name: E2E testovi na lažnom home folderu
+        shell: bash
+        run: |
+          python3 --version | tee -a "$LOG"
+          tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a "$LOG"
+
+      - name: Instaler jednom komandom (install.sh, sa poslednjeg release-a)
+        shell: bash
+        run: |
+          D="$RUNNER_TEMP/apps"; mkdir -p "$D"
+          CB_DEST="$D" CB_NO_OPEN=1 bash install.sh 2>&1 | tee -a "$LOG"
+          "$D/Claude Backup.app/Contents/MacOS/claude-backup" --version | tee -a "$LOG"
+          if xattr -p com.apple.quarantine "$D/Claude Backup.app" 2>/dev/null; then echo "✖ quarantine je ostao"; exit 1; fi
+          echo "✔ install.sh: instalirano, bez quarantine oznake" | tee -a "$LOG"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ${{ env.DMG_NAME }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-macos
+          path: ${{ env.LOG }}
+
+  windows:
+    runs-on: windows-latest
+    env:
+      EXE_NAME: Claude-Backup-Windows-Setup.exe
+      LOG: build-windows.log
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            core
+            src-tauri
+
+      - name: npm ci
+        shell: bash
+        run: npm ci 2>&1 | tee -a "$LOG"
+
+      - name: Testovi jezgra
+        shell: bash
+        run: cargo test --manifest-path core/Cargo.toml 2>&1 | tee -a "$LOG"
+
+      - name: Build .exe instalera (NSIS)
+        shell: bash
+        run: npm run tauri build -- --bundles nsis 2>&1 | tee -a "$LOG"
+
+      - name: Provera paketa
+        shell: bash
+        run: |
+          ls -la src-tauri/target/release/bundle/nsis | tee -a "$LOG"
+          src-tauri/target/release/claude-backup.exe --version 2>&1 | tee -a "$LOG"
+          cp src-tauri/target/release/bundle/nsis/*-setup.exe "$EXE_NAME"
+          sha256sum "$EXE_NAME" | tee -a "$LOG"
+
+      - name: E2E testovi na lažnom home folderu
+        shell: bash
+        run: tests/e2e.sh "src-tauri/target/release/claude-backup.exe" 2>&1 | tee -a "$LOG"
+
+      - name: Tiha instalacija i pokretanje instalirane aplikacije
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath ".\$env:EXE_NAME" -ArgumentList "/S" -Wait -PassThru
+          "instaler: izlazni kod $($p.ExitCode)" | Tee-Object -Append $env:LOG
+          $exe = Join-Path $env:LOCALAPPDATA "Claude Backup\claude-backup.exe"
+          if (-not (Test-Path $exe)) { Get-ChildItem (Join-Path $env:LOCALAPPDATA "Claude Backup") -ErrorAction SilentlyContinue | Tee-Object -Append $env:LOG; throw "nema $exe" }
+          & $exe --version | Tee-Object -Append $env:LOG
+          "✔ instalirano u $exe" | Tee-Object -Append $env:LOG
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: ${{ env.EXE_NAME }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: log-windows
+          path: ${{ env.LOG }}
+
+  publish:
+    needs: [macos, windows]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: art
+
+      - name: GitHub Release
+        if: needs.macos.result == 'success' && needs.windows.result == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          gh release delete latest --cleanup-tag -y 2>/dev/null || true
+          gh release create "$TAG" art/macos/Claude-Backup-AppleSilicon.dmg art/windows/Claude-Backup-Windows-Setup.exe \
+            --target "$GITHUB_SHA" \
+            --title "Claude Backup $TAG" \
+            --notes "Build iz ${GITHUB_SHA::7}. Mac (Apple Silicon): .dmg ili install.sh. Windows 10/11: Setup.exe. Uputstvo je u README.md." \
+            --latest | tee release.txt
+
+      - name: Status u granu ci-status
+        if: always()
+        run: |
+          D=$(mktemp -d)
+          cp art/log-macos/*.log art/log-windows/*.log "$D/" 2>/dev/null || true
+          cp release.txt "$D/" 2>/dev/null || true
+          {
+            echo "macos=${{ needs.macos.result }}"
+            echo "windows=${{ needs.windows.result }}"
+            echo "sha=${GITHUB_SHA}"
+            echo "run=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            date -u
+          } > "$D/STATUS"
+          cd "$D"
+          git init -q -b ci-status
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "CI ${GITHUB_SHA::7}: mac ${{ needs.macos.result }}, win ${{ needs.windows.result }}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" ci-status

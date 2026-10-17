@@ -1,30 +1,44 @@
 # Claude Backup
 
-Mac aplikacija (Apple Silicon) koja pravi potpun, proveren backup Claude Code i Cowork istorije: razgovore, memoriju projekata, podešavanja, skillove, MCP servere, slike iz razgovora.
+Aplikacija za **Mac (Apple Silicon)** i **Windows 10/11** koja pravi potpun, proveren backup Claude Code i Cowork istorije: razgovore, memoriju projekata, podešavanja, skillove, MCP servere, slike iz razgovora.
 
 - **Samo čita.** Claude fajlove nikad ne briše i ne menja.
 - **Proverava sve.** Svaki fajl dobija SHA-256 zbir, a na kraju se ceo backup ponovo pročita i uporedi.
 - **Originalni format + čitljivo.** Tačne kopije koje Claude ume da učita nazad, plus `Pregled.html` i Markdown.
 - **Vraćanje samo dodaje.** Fajlovi koje već imaš se ne prepisuju.
-- **Automatski backup.** Dnevno, nedeljno ili mesečno preko macOS launchd-a. Ako je Mac bio ugašen, backup se napravi čim ga upališ.
+- **Automatski backup.** Dnevno, nedeljno ili mesečno (macOS launchd / Windows Task Scheduler). Ako je računar bio ugašen, backup se napravi čim ga upališ.
 - **Istorija jednog projekta.** Čuva se u `<projekat>/claude-istorija/`, uz `.gitignore` da ne ode na GitHub.
 - **Čuvanje istorije.** Podešava `cleanupPeriodDays` da Claude Code ne briše stare razgovore posle 30 dana.
 
-## Instalacija
+## Instalacija — Mac
 
-1. Skini [Claude-Backup-AppleSilicon.dmg](https://github.com/hallonsaftt/backuper-ai/releases/latest/download/Claude-Backup-AppleSilicon.dmg) (ili sa stranice [Releases](https://github.com/hallonsaftt/backuper-ai/releases/latest)).
-2. Otvori .dmg i prevuci **Claude Backup** u **Applications**.
-3. Aplikacija nije potpisana Apple sertifikatom, pa je macOS prvi put blokira. Otvori Terminal i pokreni:
+Najlakše: otvori **Terminal** i nalepi jedan red. Skine poslednju verziju, ubaci je u Applications i otvori — bez „Open Anyway” i bez dodatnih komandi. Isti red služi i za ažuriranje.
+
+```
+curl -fsSL https://raw.githubusercontent.com/hallonsaftt/backuper-ai/main/install.sh | bash
+```
+
+Ručno, preko .dmg-a:
+
+1. Skini [Claude-Backup-AppleSilicon.dmg](https://github.com/hallonsaftt/backuper-ai/releases/latest/download/Claude-Backup-AppleSilicon.dmg) i prevuci **Claude Backup** u **Applications**.
+2. Aplikacija nije potpisana Apple sertifikatom, pa je macOS prvi put blokira. U Terminalu:
    ```
    xattr -dr com.apple.quarantine "/Applications/Claude Backup.app"
    ```
-   Ili: pokušaj da je otvoriš, pa idi u **System Settings → Privacy & Security** i klikni **Open Anyway**.
-4. (Preporuka, za automatski backup) **System Settings → Privacy & Security → Full Disk Access** → dodaj Claude Backup. Bez toga pozadinski backup ne može da čita projekte na Desktopu i u Documents.
+   ili pokušaj da je otvoriš, pa **System Settings → Privacy & Security → Open Anyway**.
+
+Za automatski backup preporuka: **System Settings → Privacy & Security → Full Disk Access** → dodaj Claude Backup (inače pozadinski backup ne može da čita projekte na Desktopu i u Documents). Posle ažuriranja ovo ponekad treba ponoviti.
+
+## Instalacija — Windows
+
+1. Skini [Claude-Backup-Windows-Setup.exe](https://github.com/hallonsaftt/backuper-ai/releases/latest/download/Claude-Backup-Windows-Setup.exe) i pokreni ga. Instalira se samo za tvog korisnika, bez admin prava.
+2. Instaler nije potpisan sertifikatom, pa Windows SmartScreen može da kaže „Windows protected your PC” → klikni **More info → Run anyway**.
 
 ## Komandna linija
 
-Ista aplikacija radi i bez prozora:
+Ista aplikacija radi i bez prozora.
 
+Mac:
 ```
 A="/Applications/Claude Backup.app/Contents/MacOS/claude-backup"
 "$A" --list
@@ -35,7 +49,15 @@ A="/Applications/Claude Backup.app/Contents/MacOS/claude-backup"
 "$A" --schedule daily --at 14:00 --keep 14
 ```
 
-Format backupa je isti kao kod Python skripte `claude_backup.py`, pa aplikacija čita i vraća i njene backupe (i obrnuto).
+Windows (PowerShell):
+```
+$A = "$env:LOCALAPPDATA\Claude Backup\claude-backup.exe"
+& $A --list | Out-Host
+& $A --backup --dest "$HOME\ClaudeBackups" | Out-Host
+& $A --schedule daily --at 14:00 --keep 14 | Out-Host
+```
+
+Format backupa je isti na oba sistema i isti kao kod Python skripte `claude_backup.py`, pa se backupi mogu proveravati i vraćati bilo gde.
 
 ## Razvoj
 
@@ -53,4 +75,4 @@ tests/e2e.sh <putanja do claude-backup> python/claude_backup.py   # E2E na lažn
 - `python/claude_backup.py` — ista funkcionalnost kao terminal program (TUI), isti format backupa
 - `tests/` — E2E test: backup → provera → vraćanje, uz proveru da izvorni fajlovi nisu dirani
 
-Build za .dmg radi GitHub Actions (`.github/workflows/build-macos.yml`) na svaki push na `main`.
+Build za .dmg i .exe radi GitHub Actions (`.github/workflows/build.yml`) na svaki push na `main`, uz testove na pravom Mac-u i Windowsu.

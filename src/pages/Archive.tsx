@@ -5,6 +5,7 @@ import { Callout, Check, cx, KV, PageHead, rise, Seal, Spinner } from "../compon
 import { useJob } from "../job";
 import { ago, fmtWhen, human, nFiles, num, years } from "../lib/format";
 import type { BackupFile, CatPlan, Overview, PlanDone, RestoreDone, VerifyResult } from "../types";
+import { T } from "../lib/platform";
 
 type View =
   | { k: "list" }
@@ -132,7 +133,7 @@ export function Archive({ ov, onChanged }: { ov: Overview; onChanged: () => void
               </div>
               <div className="num text-right text-[12.5px] text-muted">{b.is_zip ? human(b.size) : "folder"}</div>
               <div className="flex justify-end gap-1.5">
-                <button className="btn btn-quiet" onClick={() => reveal(b.path)} title="Prikaži u Finderu">
+                <button className="btn btn-quiet" onClick={() => reveal(b.path)} title={`Prikaži u ${T.inFm}`}>
                   <FolderSearch size={15} />
                 </button>
                 <button className="btn btn-ghost h-[32px] px-3 text-[12.5px]" onClick={() => verify(b.path)}>
@@ -181,7 +182,7 @@ function Verified({ file, vr, onBack, onRestore }: { file: string; vr: VerifyRes
                 </button>
               )}
               <button className="btn btn-ghost" onClick={() => reveal(file)}>
-                <FolderSearch size={16} /> Finder
+                <FolderSearch size={16} /> {T.fm}
               </button>
               <button className="btn btn-quiet" onClick={onBack}>
                 <ArrowLeft size={15} /> Nazad
@@ -194,7 +195,7 @@ function Verified({ file, vr, onBack, onRestore }: { file: string; vr: VerifyRes
         <div className="grid grid-cols-2 gap-x-10 px-9 py-5">
           <KV k="Fajl" v={base(file)} mono />
           <KV k="Napravljen" v={fmtWhen(vr.created) || "—"} />
-          <KV k="Mac" v={vr.hostname || "—"} />
+          <KV k={T.Computer} v={vr.hostname || "—"} />
           <KV k="Claude Code" v={vr.claude_code_version || "—"} />
         </div>
         {(vr.bad.length > 0 || vr.missing.length > 0) && (
@@ -233,7 +234,7 @@ function Plan({ v, ov, set, onBack, onGo, error }: { v: Extract<View, { k: "plan
         eyebrow="Vraćanje · korak 2 od 2"
         title={
           <>
-            Šta <em className="display-wonk text-accent">fali</em> na ovom Mac-u
+            Šta <em className="display-wonk text-accent">fali</em> {T.onThis}
           </>
         }
         lead={
@@ -278,7 +279,7 @@ function Plan({ v, ov, set, onBack, onGo, error }: { v: Extract<View, { k: "plan
 
       <div className="rise mt-5 space-y-3" style={rise(2)}>
         <Callout tone="ok" icon={<ShieldCheck size={17} />} title="Vraćanje je bezbedno">
-          Dodajem samo fajlove koji ne postoje. Fajlove koje već imaš — i one koji su se u međuvremenu promenili — ne diram. Login token se ne vraća; posle prelaska na novi Mac samo se ponovo prijaviš u Claude.
+          Dodajem samo fajlove koji ne postoje. Fajlove koje već imaš — i one koji su se u međuvremenu promenili — ne diram. Login token se ne vraća; posle prelaska na {T.newComputer} samo se ponovo prijaviš u Claude.
         </Callout>
         {ov.running.length > 0 && (
           <Callout tone="warn" title="Claude je otvoren">
@@ -335,7 +336,7 @@ function Restored({ v, onBack }: { v: Extract<View, { k: "restored" }>; onBack: 
             </h1>
             <p className="mt-3 text-[14px] text-muted">
               Svaki vraćen fajl je proveren SHA-256 zbirom i ima originalni datum izmene.
-              {r.appeared > 0 && ` ${nFiles(r.appeared)} se u međuvremenu pojavilo na Mac-u — njih nisam dirao.`} Otvori Claude — razgovori su tu.
+              {r.appeared > 0 && ` ${nFiles(r.appeared)} se u međuvremenu pojavilo ${T.onThis} — njih nisam dirao.`} Otvori Claude — razgovori su tu.
             </p>
             <button className="btn btn-ink mt-6" onClick={onBack}>
               <ArrowLeft size={15} /> Nazad na backupe

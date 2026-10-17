@@ -143,7 +143,10 @@ w(C / "skills/laravel-deploy/SKILL.md", "---\nname: laravel-deploy\n---\nKoraci.
 w(C / "skills/laravel-deploy/scripts/deploy.sh", "#!/bin/bash\necho deploy\n", 0o755)
 w(C / "skills/Šifre i čćž/SKILL.md", "unicode ime\n")
 w(H / "dev/shared-skill/SKILL.md", "deljeni skill van ~/.claude\n")
-os.symlink(str(H / "dev/shared-skill"), C / "skills/shared-skill")
+try:
+    os.symlink(str(H / "dev/shared-skill"), C / "skills/shared-skill", target_is_directory=True)
+except OSError:
+    print("napomena: simbolički link nije moguć na ovom sistemu — preskačem")
 w(C / "agents/reviewer.md", "---\nname: reviewer\n---\n")
 w(C / "commands/fix issue.md", "komanda sa razmakom\n")
 w(C / "plugins/installed_plugins.json", "{}")

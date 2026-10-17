@@ -162,6 +162,94 @@ pub fn os_err(e: &io::Error) -> String {
     msg
 }
 
+// ---------------------------------------------------------------- razlike između sistema
+
+/// Vreme poslednje izmene u nanosekundama od 1970.
+pub fn meta_mtime_ns(m: &std::fs::Metadata) -> i64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        m.mtime() * 1_000_000_000 + m.mtime_nsec()
+    }
+    #[cfg(not(unix))]
+    {
+        match m.modified() {
+            Ok(t) => match t.duration_since(std::time::UNIX_EPOCH) {
+                Ok(d) => d.as_nanos() as i64,
+                Err(e) => -(e.duration().as_nanos() as i64),
+            },
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Unix dozvole (na Windowsu približno: samo-za-čitanje ili ne).
+pub fn meta_mode(m: &std::fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        m.mode()
+    }
+    #[cfg(not(unix))]
+    {
+        let base = if m.is_dir() { 0o040755 } else { 0o100644 };
+        if m.permissions().readonly() {
+            base & !0o222
+        } else {
+            base
+        }
+    }
+}
+
+/// Postavlja unix dozvole; na Windowsu ne radi ništa.
+#[allow(unused_variables)]
+pub fn set_mode(f: &std::fs::File, mode: u32) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = f.set_permissions(std::fs::Permissions::from_mode(mode));
+    }
+}
+
+#[allow(unused_variables)]
+pub fn set_path_mode(p: &Path, mode: u32) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode))?;
+    }
+    Ok(())
+}
+
+/// Spoljni program bez treptanja crnog prozora na Windowsu.
+pub fn command(program: &str) -> std::process::Command {
+    #[allow(unused_mut)]
+    let mut c = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    c
+}
+
+pub fn hostname() -> String {
+    #[cfg(unix)]
+    {
+        let mut buf = [0u8; 256];
+        let r = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
+        if r == 0 {
+            let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
+            return String::from_utf8_lossy(&buf[..end]).to_string();
+        }
+        "?".into()
+    }
+    #[cfg(not(unix))]
+    {
+        std::env::var("COMPUTERNAME").unwrap_or_else(|_| "?".into())
+    }
+}
+
 pub fn esc(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 16);
     for c in s.chars() {

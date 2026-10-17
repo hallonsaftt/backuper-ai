@@ -9,7 +9,6 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use std::fs;
 use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 
 pub const RECOMMENDED_DAYS: i64 = 3650;
 pub const DEFAULT_CLEANUP: i64 = 30;
@@ -63,6 +62,7 @@ fn patch_json_text(raw: &str, key: &str, value: i64, before: &Map<String, Value>
     let mut expected = before.clone();
     expected.insert(key.into(), Value::from(value));
     let exp_v = Value::Object(expected.clone());
+    let nl = if raw.contains("\r\n") { "\r\n" } else { "\n" }; // Windows fajl ostaje sa CRLF
     if !raw.trim().is_empty() {
         let new = if before.contains_key(key) {
             let pat = Regex::new(&format!(r#"("{}"\s*:\s*)(-?\d+(?:\.\d+)?|null|true|false|"[^"]*")"#, regex::escape(key))).unwrap();
@@ -70,7 +70,7 @@ fn patch_json_text(raw: &str, key: &str, value: i64, before: &Map<String, Value>
         } else if let Some(i) = raw.find('{') {
             if raw[i + 1..].trim_start().starts_with('}') {
                 let j = i + 1 + raw[i + 1..].find('}').unwrap();
-                format!("{}{{\n  \"{}\": {}\n}}{}", &raw[..i], key, value, &raw[j + 1..])
+                format!("{}{{{nl}  \"{}\": {}{nl}}}{}", &raw[..i], key, value, &raw[j + 1..])
             } else if !raw[i + 1..].trim_start_matches([' ', '\t']).starts_with(['\n', '\r']) {
                 // sve u jednom redu → ubaci u isti red
                 format!("{}\"{}\": {}, {}", &raw[..i + 1], key, value, raw[i + 1..].trim_start())
@@ -82,7 +82,7 @@ fn patch_json_text(raw: &str, key: &str, value: i64, before: &Map<String, Value>
                     .map(|l| l.chars().take_while(|c| *c == ' ' || *c == '\t').collect())
                     .filter(|s: &String| !s.is_empty())
                     .unwrap_or_else(|| "  ".into());
-                format!("{}\n{}\"{}\": {},{}", &raw[..i + 1], indent, key, value, &raw[i + 1..])
+                format!("{}{nl}{}\"{}\": {},{}", &raw[..i + 1], indent, key, value, &raw[i + 1..])
             }
         } else {
             String::new()
@@ -90,7 +90,7 @@ fn patch_json_text(raw: &str, key: &str, value: i64, before: &Map<String, Value>
         if !new.is_empty() {
             if let Ok(v) = serde_json::from_str::<Value>(&new) {
                 if v == exp_v {
-                    return if new.ends_with('\n') { new } else { new + "\n" };
+                    return if new.ends_with('\n') { new } else { new + nl };
                 }
             }
         }
@@ -158,7 +158,7 @@ pub fn set_retention(env: &Env, days: i64) -> SetResult {
             f.sync_all()?;
         }
         if let Ok(m) = fs::metadata(&p) {
-            let _ = fs::set_permissions(&tmp, fs::Permissions::from_mode(m.permissions().mode() & 0o7777));
+            let _ = set_path_mode(&tmp, meta_mode(&m) & 0o7777);
         }
         fs::rename(&tmp, &p)?;
         let check: Value = serde_json::from_str(&fs::read_to_string(&p)?).map_err(std::io::Error::other)?;
@@ -173,5 +173,25 @@ pub fn set_retention(env: &Env, days: i64) -> SetResult {
             SetResult { ok: false, message: "provera posle upisa nije prošla — vraćen je stari fajl".into(), backup, changes: vec![] }
         }
         Err(e) => SetResult { ok: false, message: format!("izmena nije uspela ({}); tvoj fajl nije diran", os_err(&e)), backup, changes: vec![] },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn patch(raw: &str) -> String {
+        let before: Map<String, Value> = if raw.trim().is_empty() { Map::new() } else { serde_json::from_str(raw).unwrap() };
+        patch_json_text(raw, "cleanupPeriodDays", 3650, &before)
+    }
+
+    #[test]
+    fn keeps_file_style() {
+        assert_eq!(patch("{\r\n    \"model\": \"opus\"\r\n}\r\n"), "{\r\n    \"cleanupPeriodDays\": 3650,\r\n    \"model\": \"opus\"\r\n}\r\n");
+        assert_eq!(patch("{\n  \"model\": \"opus\"\n}\n"), "{\n  \"cleanupPeriodDays\": 3650,\n  \"model\": \"opus\"\n}\n");
+        assert_eq!(patch("{\"a\":1}"), "{\"cleanupPeriodDays\": 3650, \"a\":1}\n");
+        assert_eq!(patch("{\n  \"cleanupPeriodDays\": 30,\n  \"a\": 1\n}\n"), "{\n  \"cleanupPeriodDays\": 3650,\n  \"a\": 1\n}\n");
+        assert_eq!(patch("{}"), "{\n  \"cleanupPeriodDays\": 3650\n}\n");
+        assert_eq!(patch(""), "{\n  \"cleanupPeriodDays\": 3650\n}\n");
     }
 }

@@ -1,6 +1,7 @@
 import { Archive, CalendarClock, FolderGit2, Hourglass, LayoutGrid, LifeBuoy, PackagePlus, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Overview, Page } from "../types";
+import { isMac } from "../lib/platform";
 import { cx } from "./ui";
 
 interface Item {
@@ -48,7 +49,8 @@ export function Sidebar({ page, onNav, ov, locked, version }: { page: Page; onNa
 
   return (
     <aside className="relative flex w-[244px] shrink-0 flex-col bg-side text-side-text">
-      <div data-tauri-drag-region className="h-[46px] shrink-0" />
+      {/* na Mac-u ovde stoje dugmići prozora */}
+      <div data-tauri-drag-region className={cx("shrink-0", isMac ? "h-[46px]" : "h-[22px]")} />
       <div data-tauri-drag-region className="flex items-center gap-3 px-5 pb-6">
         <Mark />
         <div data-tauri-drag-region>

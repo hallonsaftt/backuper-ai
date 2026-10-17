@@ -2,6 +2,7 @@ import { ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useJob } from "../job";
 import { Spinner } from "./ui";
+import { T } from "../lib/platform";
 
 const PHASE: Record<string, [string, string]> = {
   copy: ["Kopiram i proveravam", "Svaki fajl se čita, kopira i odmah proverava SHA-256 zbirom."],
@@ -9,7 +10,7 @@ const PHASE: Record<string, [string, string]> = {
   render: ["Pravim čitljivu verziju", "Pregled.html i Markdown, da razgovore možeš da čitaš bez Claude-a."],
   verify: ["Proveravam backup", "Ponovo čitam svaki fajl iz gotovog backupa i upoređujem SHA-256."],
   rescan: ["Gledam da li se nešto menjalo", "Ako je Claude radio za to vreme, zabeležiću šta je novo."],
-  plan: ["Upoređujem sa tvojim Mac-om", "Tražim šta fali — ništa još ne diram."],
+  plan: [`Upoređujem ${T.withYour}`, "Tražim šta fali — ništa još ne diram."],
   restore: ["Vraćam fajlove", "Samo dodajem ono što fali. Postojeće ne prepisujem."],
 };
 

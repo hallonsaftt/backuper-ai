@@ -1,7 +1,7 @@
 //! Tauri sloj: komande koje poziva interfejs. Sav posao radi `backup-core`.
 
 use backup_core::backup::{dest_ok, run_backup, BackupOpts, BackupResult};
-use backup_core::env::{expand, Env};
+use backup_core::env::{expand, real, Env};
 use backup_core::restore::{apply_restore, plan_restore, summarize, CatPlan, RItem, RestoreResult};
 use backup_core::retention::{retention_info, set_retention as core_set_retention, RetentionInfo, SetResult};
 use backup_core::scan::*;
@@ -93,6 +93,7 @@ struct Overview {
     app_in_applications: bool,
     last_backup: Option<BackupFileDto>,
     is_mac: bool,
+    os: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -114,6 +115,7 @@ struct JobDone {
 
 // ---------------------------------------------------------------- pomoćno
 
+#[cfg(unix)]
 fn free_space(p: &Path) -> u64 {
     use std::ffi::CString;
     let c = match CString::new(p.to_string_lossy().as_bytes()) {
@@ -130,6 +132,85 @@ fn free_space(p: &Path) -> u64 {
     }
 }
 
+#[cfg(windows)]
+fn free_space(p: &Path) -> u64 {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    let w: Vec<u16> = p.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut avail: u64 = 0;
+    let ok = unsafe { GetDiskFreeSpaceExW(w.as_ptr(), &mut avail, std::ptr::null_mut(), std::ptr::null_mut()) };
+    if ok != 0 {
+        avail
+    } else {
+        0
+    }
+}
+
+/// Desktop, Documents, Downloads i ~/ClaudeBackups (na Windowsu i kad su preusmereni na OneDrive).
+fn user_folders(env: &Env) -> Vec<(&'static str, PathBuf)> {
+    #[cfg(windows)]
+    {
+        let pick = |d: Option<PathBuf>, n: &str| d.unwrap_or_else(|| env.home.join(n));
+        vec![
+            ("Desktop", pick(dirs::desktop_dir(), "Desktop")),
+            ("Documents", pick(dirs::document_dir(), "Documents")),
+            ("Downloads", pick(dirs::download_dir(), "Downloads")),
+            ("ClaudeBackups", env.home.join("ClaudeBackups")),
+        ]
+    }
+    #[cfg(not(windows))]
+    {
+        vec![
+            ("Desktop", env.home.join("Desktop")),
+            ("Documents", env.home.join("Documents")),
+            ("Downloads", env.home.join("Downloads")),
+            ("ClaudeBackups", env.home.join("ClaudeBackups")),
+        ]
+    }
+}
+
+/// Spoljni diskovi: /Volumes na Mac-u, ostala slova (D:, E:…) na Windowsu.
+fn volumes() -> Vec<(String, PathBuf)> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+        let sys = std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()).to_uppercase();
+        let mask = unsafe { GetLogicalDrives() };
+        let mut v = vec![];
+        for i in 0..26u32 {
+            if mask & (1 << i) == 0 {
+                continue;
+            }
+            let letter = (b'A' + i as u8) as char;
+            if format!("{letter}:") == sys {
+                continue;
+            }
+            let root = format!("{letter}:\\");
+            let w: Vec<u16> = root.encode_utf16().chain(Some(0)).collect();
+            let t = unsafe { GetDriveTypeW(w.as_ptr()) };
+            // 2 = prenosivi (USB), 3 = fiksni disk
+            if (t == 2 || t == 3) && Path::new(&root).is_dir() {
+                v.push((format!("Disk {letter}:"), PathBuf::from(root)));
+            }
+        }
+        v
+    }
+    #[cfg(not(windows))]
+    {
+        let mut v = vec![];
+        if let Ok(rd) = std::fs::read_dir("/Volumes") {
+            let mut vols: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+            vols.sort();
+            for p in vols {
+                if real(&p).map(|r| r.parent().is_some()).unwrap_or(false) && p.is_dir() {
+                    v.push((p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(), p));
+                }
+            }
+        }
+        v
+    }
+}
+
 fn mtime_secs(p: &Path) -> f64 {
     std::fs::metadata(p)
         .and_then(|m| m.modified())
@@ -141,44 +222,26 @@ fn mtime_secs(p: &Path) -> f64 {
 
 fn dests(env: &Env) -> Vec<DestDto> {
     let mut v = vec![];
-    for (label, p) in [("Desktop", env.home.join("Desktop")), ("Documents", env.home.join("Documents")),
-                       ("Downloads", env.home.join("Downloads")), ("ClaudeBackups", env.home.join("ClaudeBackups"))] {
+    for (label, p) in user_folders(env) {
         if p.is_dir() {
             v.push(DestDto { label: label.into(), path: p.to_string_lossy().into(), path_tilde: env.tilde(&p), free: free_space(&p), kind: "home".into() });
         }
     }
-    if let Ok(rd) = std::fs::read_dir("/Volumes") {
-        let mut vols: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();
-        vols.sort();
-        for vpath in vols {
-            if std::fs::canonicalize(&vpath).map(|r| r != Path::new("/")).unwrap_or(false) && vpath.is_dir() {
-                v.push(DestDto {
-                    label: vpath.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-                    path: vpath.to_string_lossy().into(),
-                    path_tilde: vpath.to_string_lossy().into(),
-                    free: free_space(&vpath),
-                    kind: "volume".into(),
-                });
-            }
-        }
+    for (label, p) in volumes() {
+        v.push(DestDto { label, path: p.to_string_lossy().into(), path_tilde: p.to_string_lossy().into(), free: free_space(&p), kind: "volume".into() });
     }
     v
 }
 
 fn find_backups(env: &Env, inv: Option<&Inventory>) -> Vec<BackupFileDto> {
-    let mut locs: Vec<PathBuf> = vec![env.home.join("Desktop"), env.home.join("Documents"), env.home.join("Downloads"), env.home.join("ClaudeBackups")];
+    let mut locs: Vec<PathBuf> = user_folders(env).into_iter().map(|(_, p)| p).collect();
     let st = schedule_status(env);
     if !st.dest.is_empty() {
         locs.push(PathBuf::from(&st.dest));
     }
-    if let Ok(rd) = std::fs::read_dir("/Volumes") {
-        for e in rd.filter_map(|e| e.ok()) {
-            let p = e.path();
-            if std::fs::canonicalize(&p).map(|r| r != Path::new("/")).unwrap_or(false) {
-                locs.push(p.clone());
-                locs.push(p.join("ClaudeBackups"));
-            }
-        }
+    for (_, p) in volumes() {
+        locs.push(p.clone());
+        locs.push(p.join("ClaudeBackups"));
     }
     if let Some(inv) = inv {
         for p in inv.projects.values() {
@@ -323,10 +386,11 @@ async fn overview(state: State<'_, AppState>) -> Result<Overview, String> {
         claude_size: inv.cats.iter().map(|c| c.size()).sum(),
         skills: ext_note.rsplit_once(" · ").map(|(a, _)| a.to_string()).unwrap_or(ext_note),
         problems: inv.problems.len(),
-        app_in_applications: exe.starts_with("/Applications/") || exe.contains("/Applications/"),
+        app_in_applications: !cfg!(target_os = "macos") || exe.starts_with("/Applications/") || exe.contains("/Applications/"),
         app_path: exe,
         last_backup: backups.into_iter().next(),
         is_mac: cfg!(target_os = "macos"),
+        os: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "linux" }.into(),
         cats,
         projects,
     })
@@ -552,17 +616,33 @@ fn schedule_run_now() -> Result<(), String> {
 
 #[tauri::command]
 fn reveal(path: String) {
-    let _ = Command::new("open").arg("-R").arg(path).spawn();
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("explorer.exe").raw_arg(format!("/select,\"{path}\"")).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg("-R").arg(path).spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let dir = Path::new(&path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        let _ = Command::new("xdg-open").arg(dir).spawn();
+    }
 }
 
 #[tauri::command]
 fn open_path(path: String) {
-    let _ = Command::new("open").arg(path).spawn();
+    let opener = if cfg!(windows) { "explorer.exe" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
+    let _ = Command::new(opener).arg(path).spawn();
 }
 
 #[tauri::command]
 fn open_fda_settings() {
-    let _ = Command::new("open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles").spawn();
+    if cfg!(target_os = "macos") {
+        let _ = Command::new("open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles").spawn();
+    }
 }
 
 #[tauri::command]

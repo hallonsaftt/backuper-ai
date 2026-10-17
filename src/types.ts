@@ -95,6 +95,7 @@ export interface Overview {
   app_in_applications: boolean;
   last_backup: BackupFile | null;
   is_mac: boolean;
+  os?: string;
 }
 
 export interface Estimate {

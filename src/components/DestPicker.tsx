@@ -7,7 +7,7 @@ import { cx } from "./ui";
 
 const ICON: Record<string, typeof Monitor> = { Desktop: Monitor, Documents: FolderOpen, Downloads: FolderOpen, ClaudeBackups: HardDrive };
 
-export function DestPicker({ dests, value, onChange, hint }: { dests: Dest[]; value: string; onChange: (p: string) => void; hint?: (d: Dest) => string | null }) {
+export function DestPicker({ dests, value, onChange, hint, createOk }: { dests: Dest[]; value: string; onChange: (p: string) => void; hint?: (d: Dest) => string | null; createOk?: boolean }) {
   const [custom, setCustom] = useState<string | null>(() => (value && !dests.some((d) => d.path === value) ? value : null));
   const [err, setErr] = useState<string | null>(null);
 
@@ -68,7 +68,11 @@ export function DestPicker({ dests, value, onChange, hint }: { dests: Dest[]; va
           Drugi folder…
         </button>
       </div>
-      {err && <div className="mt-2 text-[12.5px] text-err">{err}</div>}
+      {err && (createOk && err.startsWith("Taj folder ne postoji") ? (
+        <div className="mt-2 text-[12.5px] text-muted">Folder još ne postoji — napraviću ga.</div>
+      ) : (
+        <div className="mt-2 text-[12.5px] text-err">{err}</div>
+      ))}
     </div>
   );
 }

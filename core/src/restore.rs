@@ -9,7 +9,6 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
@@ -33,23 +32,53 @@ pub struct CatPlan {
     pub add_bytes: u64,
 }
 
+/// Odakle je fajl: iz „arc” putanje u backupu kad je to Claude-ov folder (radi i ako je backup sa drugog
+/// računara ili sistema), inače iz zapisane izvorne putanje.
+fn target_from_arc(env: &Env, arc: &str) -> Option<PathBuf> {
+    let rest = arc.splitn(2, '/').nth(1).unwrap_or(""); // bez „ClaudeBackup_…/” ako postoji
+    let rest = if arc.starts_with("original/") { arc } else { rest };
+    let join = |base: &Path, r: &str| -> PathBuf {
+        let mut p = base.to_path_buf();
+        for c in r.split('/').filter(|c| !c.is_empty()) {
+            p.push(c);
+        }
+        p
+    };
+    if let Some(r) = rest.strip_prefix("original/dot-claude/") {
+        return Some(join(&env.claude, r));
+    }
+    if rest == "original/claude.json" {
+        return Some(env.claude_json.clone());
+    }
+    if let Some(r) = rest.strip_prefix("original/claude-app/") {
+        return Some(join(&env.app, r));
+    }
+    if let Some(r) = rest.strip_prefix("original/claude-tmp/") {
+        return Some(join(&env.tmp, r));
+    }
+    None
+}
+
+fn bad_token(tok: &str) -> bool {
+    tok.is_empty() || tok.split(['/', '\\']).any(|p| p == "..")
+}
+
 pub fn restore_target(env: &Env, e: &Value) -> (Option<PathBuf>, &'static str) {
     let tok = e["src"].as_str().unwrap_or("");
-    if tok.is_empty() || tok.split('/').any(|p| p == "..") {
+    if bad_token(tok) {
         return (None, "unsafe");
     }
-    let t = env.from_token(tok);
     if e["cat"].as_str() == Some("project_files") {
+        let t = env.from_token(tok);
         let root_tok = e["proj_root"].as_str().unwrap_or("");
-        if root_tok.is_empty() || root_tok.split('/').any(|p| p == "..") {
+        if bad_token(root_tok) {
             return (None, "unsafe");
         }
         let root = env.from_token(root_tok);
-        let (ts, rs) = (t.to_string_lossy().to_string(), root.to_string_lossy().to_string());
-        if !ts.starts_with(&format!("{}/", rs)) {
-            return (None, "unsafe");
-        }
-        let rel = &ts[rs.len() + 1..];
+        let rel = match t.strip_prefix(&root) {
+            Ok(r) => crate::env::slash(r),
+            Err(_) => return (None, "unsafe"),
+        };
         if !(rel == "CLAUDE.md" || rel == "CLAUDE.local.md" || rel == ".mcp.json" || rel.starts_with(".claude/")) {
             return (None, "unsafe");
         }
@@ -58,7 +87,9 @@ pub fn restore_target(env: &Env, e: &Value) -> (Option<PathBuf>, &'static str) {
         }
         return (Some(t), "ok");
     }
-    if ![&env.home, &env.tmp, &env.claude].iter().any(|a| is_within(&t, a) && t != **a) {
+    let arc = e["arc"].as_str().unwrap_or("");
+    let t = target_from_arc(env, arc).unwrap_or_else(|| env.from_token(tok));
+    if ![&env.home, &env.tmp, &env.claude, &env.app].iter().any(|a| is_within(&t, a) && t != **a) {
         return (None, "unsafe");
     }
     (Some(t), "ok")
@@ -175,7 +206,7 @@ pub fn apply_restore(rd: &mut Reader, items: &mut [RItem], cats: Option<&[String
             let mt = e["mtime_ns"].as_i64().unwrap_or(0).max(0) as u64;
             let when = UNIX_EPOCH + Duration::from_nanos(mt);
             let _ = dst.set_times(fs::FileTimes::new().set_modified(when).set_accessed(when));
-            let _ = dst.set_permissions(fs::Permissions::from_mode(e["mode"].as_u64().unwrap_or(0o600) as u32 & 0o777));
+            set_mode(&dst, e["mode"].as_u64().unwrap_or(0o600) as u32 & 0o777);
             Ok(true)
         })();
         match r {

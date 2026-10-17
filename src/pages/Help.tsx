@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { PageHead, rise } from "../components/ui";
+import { isWin, T } from "../lib/platform";
 
 const Q: [string, ReactNode][] = [
   [
@@ -24,7 +25,7 @@ const Q: [string, ReactNode][] = [
   [
     "Zašto u backupu nema login tokena?",
     <>
-      <span className="mono">~/.claude/.credentials.json</span> se namerno preskače — to je tvoja prijava i ne treba da stoji u zip-u koji možda šalješ ili čuvaš na disku. Posle vraćanja na novi Mac samo se ponovo prijaviš.
+      <span className="mono">{isWin ? "%USERPROFILE%\\.claude\\.credentials.json" : "~/.claude/.credentials.json"}</span> se namerno preskače — to je tvoja prijava i ne treba da stoji u zip-u koji možda šalješ ili čuvaš na disku. Posle vraćanja na {T.newComputer} samo se ponovo prijaviš.
     </>,
   ],
   [
@@ -34,9 +35,9 @@ const Q: [string, ReactNode][] = [
     </>,
   ],
   [
-    "Kako da prebacim sve na novi Mac?",
+    `Kako da prebacim sve na ${T.newComputer}?`,
     <>
-      Na starom Mac-u napravi kompletan backup na eksterni disk ili iCloud. Na novom instaliraj Claude i ovu aplikaciju, otvori „Backupi i vraćanje” → Otvori .zip… → Vrati izabrano. Projekte (kod) prebaci kao i inače; ako su na istoj putanji, razgovori se odmah povezuju.
+      Na starom {T.computer === "Mac" ? "Mac-u" : "računaru"} napravi kompletan backup na eksterni disk ili {isWin ? "OneDrive" : "iCloud"}. Na novom instaliraj Claude i ovu aplikaciju, otvori „Backupi i vraćanje” → Otvori .zip… → Vrati izabrano. Projekte (kod) prebaci kao i inače; ako su na istoj putanji, razgovori se odmah povezuju.
     </>,
   ],
   [
@@ -48,7 +49,15 @@ const Q: [string, ReactNode][] = [
   [
     "Automatski backup — moram li da držim aplikaciju otvorenu?",
     <>
-      Ne. macOS (launchd) je pokreće u zadato vreme u pozadini, bez prozora. Ako je Mac spavao, backup se pravi kad se probudi; ako je bio ugašen, čim se uključiš i prijaviš. Po završetku stiže obaveštenje. Dnevnik je u <span className="mono">~/Library/Logs/claude-backup.log</span>.
+      {isWin ? (
+        <>
+          Ne. Windows (Task Scheduler) je pokreće u zadato vreme u pozadini, bez prozora. Ako je računar spavao ili bio ugašen, backup se pravi čim ga upališ i prijaviš se. Po završetku stiže obaveštenje. Dnevnik je u <span className="mono">%APPDATA%\\ClaudeBackupTool\\claude-backup.log</span>.
+        </>
+      ) : (
+        <>
+          Ne. macOS (launchd) je pokreće u zadato vreme u pozadini, bez prozora. Ako je Mac spavao, backup se pravi kad se probudi; ako je bio ugašen, čim se uključiš i prijaviš. Po završetku stiže obaveštenje. Dnevnik je u <span className="mono">~/Library/Logs/claude-backup.log</span>.
+        </>
+      )}
     </>,
   ],
   [
@@ -56,7 +65,15 @@ const Q: [string, ReactNode][] = [
     <>
       Može — ista aplikacija radi i kao CLI:
       <pre className="mono selectable mt-2 overflow-x-auto rounded-lg bg-bg-2 p-3 text-[11.5px] leading-relaxed">
-        {`A="/Applications/Claude Backup.app/Contents/MacOS/claude-backup"
+        {isWin
+          ? `# PowerShell
+$A = "$env:LOCALAPPDATA\\Claude Backup\\claude-backup.exe"
+& $A --list | Out-Host
+& $A --backup --dest "$HOME\\ClaudeBackups" | Out-Host
+& $A --project-backup "$HOME\\Projects\\moj-projekat" | Out-Host
+& $A --verify "$HOME\\Desktop\\ClaudeBackup_….zip" | Out-Host
+& $A --restore "$HOME\\Desktop\\ClaudeBackup_….zip" | Out-Host`
+          : `A="/Applications/Claude Backup.app/Contents/MacOS/claude-backup"
 "$A" --list
 "$A" --backup --dest ~/ClaudeBackups
 "$A" --project-backup ~/Projects/moj-projekat
@@ -67,7 +84,9 @@ const Q: [string, ReactNode][] = [
   ],
   [
     "Da li radi sa backupima iz Python skripte?",
-    <>Da. Format je isti (MANIFEST.json, SHA256SUMS.txt, original/…), pa aplikacija proverava i vraća backupe iz skripte, i obrnuto. Ako uključiš automatski backup ovde, on zamenjuje onaj iz skripte.</>,
+    <>
+      Da. Format je isti (MANIFEST.json, SHA256SUMS.txt, original/…), pa aplikacija proverava i vraća backupe iz skripte, i obrnuto{isWin ? " — i između Mac-a i Windowsa." : ". Ako uključiš automatski backup ovde, on zamenjuje onaj iz skripte."}
+    </>,
   ],
 ];
 

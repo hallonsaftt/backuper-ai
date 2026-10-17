@@ -1,7 +1,7 @@
 //! Backup motor. Izvorne fajlove samo ČITA; piše isključivo u novi ClaudeBackup_… fajl/folder u odredištu.
 //! Format (MANIFEST.json, putanje u arhivi) je isti kao kod Python verzije — backupi su međusobno zamenljivi.
 
-use crate::env::{is_within, Env};
+use crate::env::{is_within, real, Env};
 use crate::readable::build_readable;
 use crate::scan::*;
 use crate::util::*;
@@ -11,7 +11,6 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -79,7 +78,7 @@ impl Sink for ZipSink {
         let f = self.zw.take().unwrap().finish().map_err(io::Error::other)?;
         f.sync_all()?;
         drop(f);
-        fs::set_permissions(&self.part, fs::Permissions::from_mode(0o600))?;
+        set_path_mode(&self.part, 0o600)?;
         if fs::symlink_metadata(&self.final_path).is_ok() {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{} već postoji", self.final_path.display())));
         }
@@ -103,7 +102,7 @@ impl DirSink {
     pub fn new(final_path: PathBuf) -> io::Result<Self> {
         let part = final_path.with_file_name(format!("{}.part", final_path.file_name().unwrap().to_string_lossy()));
         fs::create_dir(&part)?;
-        fs::set_permissions(&part, fs::Permissions::from_mode(0o700))?;
+        set_path_mode(&part, 0o700)?;
         Ok(DirSink { final_path, part })
     }
 }
@@ -116,7 +115,7 @@ impl Sink for DirSink {
         }
         let mut f = OpenOptions::new().write(true).create_new(true).open(&t)?;
         io::copy(r, &mut f)?;
-        let _ = f.set_permissions(fs::Permissions::from_mode(mode & 0o777));
+        set_mode(&f, mode & 0o777);
         let mt = UNIX_EPOCH + Duration::from_nanos(mtime_ns.max(0) as u64);
         let _ = f.set_times(fs::FileTimes::new().set_modified(mt).set_accessed(mt));
         Ok(())
@@ -147,7 +146,7 @@ pub struct Captured {
 }
 
 fn st_key(m: &fs::Metadata) -> (i64, u64) {
-    (m.mtime() * 1_000_000_000 + m.mtime_nsec(), m.len())
+    (meta_mtime_ns(m), m.len())
 }
 
 /// Pročita fajl u privremenu memoriju i izračuna SHA-256. Ako se fajl menjao dok je čitan
@@ -183,7 +182,7 @@ pub fn capture(src: &Path) -> io::Result<Captured> {
                 size: n,
                 stable,
                 mtime_ns: if stable { st_key(&m1).0 } else { st_key(&m2).0 },
-                mode: m2.mode(),
+                mode: meta_mode(&m2),
             });
         }
         std::thread::sleep(Duration::from_millis(300));
@@ -204,7 +203,7 @@ pub fn unique_name(dest: &Path, prefix: &str) -> String {
 
 /// Da li sme da se piše u `p`: postoji, može da se piše, i nije unutar Claude-ovih foldera.
 pub fn dest_ok(env: &Env, p: &Path) -> Option<String> {
-    let rp = fs::canonicalize(p).unwrap_or(p.to_path_buf());
+    let rp = real(p).unwrap_or(p.to_path_buf());
     match fs::metadata(&rp) {
         Ok(m) if m.is_dir() => {}
         _ => return Some("Taj folder ne postoji.".into()),
@@ -217,7 +216,7 @@ pub fn dest_ok(env: &Env, p: &Path) -> Option<String> {
         Err(e) => return Some(format!("U taj folder ne može da se piše ({}).", os_err(&e))),
     }
     for src in [&env.claude, &env.app, &env.tmp] {
-        let s = fs::canonicalize(src).unwrap_or(src.clone());
+        let s = real(src).unwrap_or(src.clone());
         if is_within(&rp, &s) {
             return Some("Backup ne sme da ide u Claude-ov folder — izaberi drugi.".into());
         }
@@ -321,27 +320,27 @@ pub fn readme_text(o: &BackupOpts, created: &str, env: &Env) -> String {
         "original/         TAČNE kopije Claude fajlova, bajt po bajt. Iz ovoga se vraća:",
         "  dot-claude/        = ~/.claude (razgovori, memorija, podešavanja, skillovi…)",
         "  claude.json        = ~/.claude.json",
-        "  claude-app/        = ~/Library/Application Support/Claude (Code tab lista, Cowork…)",
-        "  claude-tmp/        = /private/tmp/claude-<broj> (slike i scratchpad iz razgovora)",
+        if cfg!(windows) { "  claude-app/        = %APPDATA%\\Claude (Code tab lista, Cowork…)" } else { "  claude-app/        = ~/Library/Application Support/Claude (Code tab lista, Cowork…)" },
+        if cfg!(windows) { "  claude-tmp/        = %TEMP%\\claude (slike i scratchpad iz razgovora)" } else { "  claude-tmp/        = /private/tmp/claude-<broj> (slike i scratchpad iz razgovora)" },
         "  projekti/          = CLAUDE.md, .claude/ i .mcp.json iz foldera projekata",
         "                       (tačna putanja svakog projekta je u izvestaj.txt)",
         "MANIFEST.json     Spisak svih fajlova: odakle su, veličina, vreme izmene, SHA-256.",
         "SHA256SUMS.txt    Kontrolni zbirovi svih fajlova.",
         "izvestaj.txt      Šta je sačuvano, šta nije i zašto.",
         "",
-        "Folderi čije ime počinje tačkom (.claude) su u Finderu sakriveni — Cmd+Shift+. ih prikazuje.",
+        if cfg!(windows) { "Folder .claude je običan folder — vidi se u Exploreru." } else { "Folderi čije ime počinje tačkom (.claude) su u Finderu sakriveni — Cmd+Shift+. ih prikazuje." },
         "",
         "Kako da proverim da je backup ispravan",
         "--------------------------------------",
         "Claude Backup aplikacija  →  „Proveri backup”",
-        "ili u Terminalu, u ovom folderu:   shasum -a 256 -c SHA256SUMS.txt",
+        if cfg!(windows) { "ili u Git Bash-u, u ovom folderu:   sha256sum -c SHA256SUMS.txt" } else { "ili u Terminalu, u ovom folderu:   shasum -a 256 -c SHA256SUMS.txt" },
         "",
         "Kako da vratim",
         "--------------",
-        "1. Zatvori Claude (Cmd+Q).",
+        "1. Zatvori Claude.",
         "2. Claude Backup aplikacija  →  „Vrati iz backupa”  →  izaberi ovaj backup.",
         "   Program samo DODAJE fajlove koji fale. Tvoje postojeće fajlove ne dira.",
-        "3. Na novom Macu stavi projekte na iste putanje kao ranije, da bi",
+        "3. Na novom računaru stavi projekte na iste putanje kao ranije, da bi",
         "   „claude --resume” u tom folderu pronašao stare razgovore.",
         "",
         "Privatnost",
@@ -448,16 +447,7 @@ fn report_text(inv: &Inventory, files: &[Value], failed: &[(String, String)], un
     l.join("\n") + "\n"
 }
 
-pub fn hostname() -> String {
-    let mut buf = [0u8; 256];
-    let r = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
-    if r == 0 {
-        let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-        String::from_utf8_lossy(&buf[..end]).to_string()
-    } else {
-        "?".into()
-    }
-}
+pub use crate::util::hostname;
 
 // ---------------------------------------------------------------- glavni posao
 

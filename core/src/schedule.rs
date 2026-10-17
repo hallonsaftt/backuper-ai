@@ -1,4 +1,5 @@
-//! Automatski backup preko macOS planera (launchd). Ista oznaka kao Python verzija, pa jedno zamenjuje drugo.
+//! Automatski backup: na macOS-u preko launchd-a (ista oznaka kao Python verzija, pa jedno zamenjuje drugo),
+//! na Windowsu preko Task Scheduler-a. U oba slučaja propušten termin se nadoknadi čim se računar upali.
 
 use crate::env::{uid, Env};
 use crate::scan::load_json;
@@ -9,7 +10,6 @@ use serde_json::{json, Value};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 pub const SCHED_LABEL: &str = "com.claudebackup.auto";
 
@@ -17,7 +17,15 @@ pub fn plist_path(env: &Env) -> PathBuf {
     env.home.join(format!("Library/LaunchAgents/{SCHED_LABEL}.plist"))
 }
 pub fn log_path(env: &Env) -> PathBuf {
+    if cfg!(windows) {
+        return env.support.join("claude-backup.log");
+    }
     env.home.join("Library/Logs/claude-backup.log")
+}
+/// Windows: zadatak u Task Scheduler-u i naš opis podešavanja (Task Scheduler ga ne čuva u čitljivom obliku)
+pub const WIN_TASK: &str = "ClaudeBackup\\Automatski backup";
+pub fn win_config_path(env: &Env) -> PathBuf {
+    env.support.join("schedule.json")
 }
 pub fn last_run_path(env: &Env) -> PathBuf {
     env.support.join("last_run.json")
@@ -27,7 +35,7 @@ pub fn force_flag_path(env: &Env) -> PathBuf {
 }
 
 pub fn launchctl(args: &[&str]) -> (i32, String) {
-    match Command::new("launchctl").args(args).output() {
+    match command("launchctl").args(args).output() {
         Ok(o) => {
             let s = if o.stderr.is_empty() { o.stdout } else { o.stderr };
             (o.status.code().unwrap_or(1), String::from_utf8_lossy(&s).trim().to_string())
@@ -91,6 +99,28 @@ pub fn schedule_status(env: &Env) -> SchedStatus {
         dest_tilde: String::new(), keep: 0, loaded: false, program: String::new(), describe: String::new(),
         last_run: read_last_run(env), log: env.tilde(&log_path(env)),
     };
+    if cfg!(windows) {
+        let cp = win_config_path(env);
+        if !cp.is_file() {
+            return st;
+        }
+        st.enabled = true;
+        match load_json(&cp) {
+            Some(v) => {
+                st.freq = v["freq"].as_str().unwrap_or("daily").into();
+                st.hour = v["hour"].as_u64().unwrap_or(0) as u32;
+                st.minute = v["minute"].as_u64().unwrap_or(0) as u32;
+                st.dest = v["dest"].as_str().unwrap_or("").into();
+                st.dest_tilde = env.tilde(Path::new(&st.dest));
+                st.keep = v["keep"].as_u64().unwrap_or(0) as u32;
+                st.program = v["program"].as_str().unwrap_or("").into();
+            }
+            None => st.broken = true,
+        }
+        st.loaded = command("schtasks").args(["/Query", "/TN", WIN_TASK]).output().map(|o| o.status.success()).unwrap_or(false);
+        st.describe = describe(&st);
+        return st;
+    }
     if !p.is_file() {
         return st;
     }
@@ -148,6 +178,9 @@ pub fn describe(st: &SchedStatus) -> String {
 /// Pravi macOS LaunchAgent koji pokreće OVU aplikaciju u pozadini (bez prozora).
 /// RunAtLoad + --if-due: ako je termin propušten (Mac bio ugašen), backup se napravi čim se uloguješ.
 pub fn install_schedule(env: &Env, program: &Path, freq: &str, hour: u32, minute: u32, dest: &Path, keep: u32, html: bool) -> Result<(), String> {
+    if cfg!(windows) {
+        return win_install(env, program, freq, hour, minute, dest, keep, html);
+    }
     if !cfg!(target_os = "macos") && std::env::var("CLAUDE_BACKUP_FAKE_MAC").is_err() {
         return Err("Automatski backup preko launchd radi samo na macOS-u.".into());
     }
@@ -209,6 +242,20 @@ pub fn install_schedule(env: &Env, program: &Path, freq: &str, hour: u32, minute
 }
 
 pub fn remove_schedule(env: &Env) -> Result<String, String> {
+    if cfg!(windows) {
+        let exists = command("schtasks").args(["/Query", "/TN", WIN_TASK]).output().map(|o| o.status.success()).unwrap_or(false);
+        if exists {
+            let o = command("schtasks").args(["/Delete", "/TN", WIN_TASK, "/F"]).output().map_err(|e| e.to_string())?;
+            if !o.status.success() {
+                return Err(format!("Windows nije uklonio zadatak: {}", String::from_utf8_lossy(&o.stderr).trim()));
+            }
+        }
+        let cp = win_config_path(env);
+        if cp.is_file() {
+            fs::remove_file(&cp).map_err(|e| os_err(&e))?; // samo naš opis podešavanja
+        }
+        return Ok("Automatski backup je isključen. Postojeći backupi su ostali gde jesu.".into());
+    }
     let p = plist_path(env);
     let (rc, _) = launchctl(&["bootout", &format!("gui/{}/{}", uid(), SCHED_LABEL)]);
     if rc != 0 {
@@ -230,6 +277,10 @@ pub fn remove_schedule(env: &Env) -> Result<String, String> {
 pub fn run_schedule_now(env: &Env) -> Result<(), String> {
     let _ = fs::create_dir_all(&env.support);
     let _ = fs::write(force_flag_path(env), "1"); // znak da ovo pokretanje ne čeka termin
+    if cfg!(windows) {
+        let o = command("schtasks").args(["/Run", "/TN", WIN_TASK]).output().map_err(|e| e.to_string())?;
+        return if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) };
+    }
     let (rc, err) = launchctl(&["kickstart", "-k", &format!("gui/{}/{}", uid(), SCHED_LABEL)]);
     if rc == 0 { Ok(()) } else { Err(err) }
 }
@@ -268,7 +319,7 @@ pub fn schedule_due(env: &Env, now: Option<NaiveDateTime>) -> (bool, String) {
         return (true, "nema podataka o zakazivanju — pravim backup".into());
     }
     let slot = last_slot(&st.freq, st.hour, st.minute, now);
-    let installed = fs::metadata(plist_path(env))
+    let installed = fs::metadata(if cfg!(windows) { win_config_path(env) } else { plist_path(env) })
         .and_then(|m| m.modified())
         .ok()
         .map(|t| chrono::DateTime::<Local>::from(t).naive_local())
@@ -295,7 +346,7 @@ pub fn rotate_backups(dest: &Path, keep: u32, current: &Path) -> Vec<PathBuf> {
         return vec![];
     }
     let re = regex::Regex::new(r"^ClaudeBackup_\d{4}-\d{2}-\d{2}_\d{6}(_\d+)?\.zip$").unwrap();
-    let cur = fs::canonicalize(current).unwrap_or(current.to_path_buf());
+    let cur = crate::env::real(current).unwrap_or(current.to_path_buf());
     let mut names: Vec<PathBuf> = match fs::read_dir(dest) {
         Ok(rd) => rd
             .filter_map(|e| e.ok())
@@ -304,7 +355,7 @@ pub fn rotate_backups(dest: &Path, keep: u32, current: &Path) -> Vec<PathBuf> {
                 let n = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
                 re.is_match(&n)
                     && fs::symlink_metadata(p).map(|m| m.is_file()).unwrap_or(false)
-                    && fs::canonicalize(p).map(|c| c != cur).unwrap_or(false)
+                    && crate::env::real(p).map(|c| c != cur).unwrap_or(false)
             })
             .collect(),
         Err(_) => return vec![],
@@ -345,12 +396,174 @@ pub fn rotate_backups(dest: &Path, keep: u32, current: &Path) -> Vec<PathBuf> {
 }
 
 pub fn notify(title: &str, msg: &str) {
-    if !cfg!(target_os = "macos") && std::env::var("CLAUDE_BACKUP_FAKE_MAC").is_err() {
-        return;
+    #[cfg(windows)]
+    {
+        use tauri_winrt_notification::Toast;
+        let _ = Toast::new(WIN_APP_ID).title(title).text1(msg).show();
     }
-    let _ = Command::new("osascript")
-        .args(["-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)", "-e", "end run", msg, title])
-        .output();
+    #[cfg(not(windows))]
+    {
+        if !cfg!(target_os = "macos") && std::env::var("CLAUDE_BACKUP_FAKE_MAC").is_err() {
+            return;
+        }
+        let _ = command("osascript")
+            .args(["-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)", "-e", "end run", msg, title])
+            .output();
+    }
+}
+
+/// Isti identifikator kao u tauri.conf.json — Windows instaler ga dodeljuje prečici u Start meniju.
+pub const WIN_APP_ID: &str = "com.hallonsaftt.claudebackup";
+
+fn xml_esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Windows komandna linija: argument pod navodnicima ako treba (uz pravila za „\” ispred navodnika).
+pub fn win_quote(s: &str) -> String {
+    if !s.is_empty() && !s.contains([' ', '\t', '"']) {
+        return s.to_string();
+    }
+    let mut out = String::from("\"");
+    let mut bs = 0usize;
+    for c in s.chars() {
+        if c == '\\' {
+            bs += 1;
+            continue;
+        }
+        if c == '"' {
+            out.push_str(&"\\".repeat(bs * 2 + 1));
+        } else {
+            out.push_str(&"\\".repeat(bs));
+        }
+        bs = 0;
+        out.push(c);
+    }
+    out.push_str(&"\\".repeat(bs * 2));
+    out.push('"');
+    out
+}
+
+/// XML za Task Scheduler: termin + pokretanje pri prijavi (sa --if-due) + „pokreni što pre ako je propušteno”.
+#[allow(clippy::too_many_arguments)]
+pub fn win_task_xml(program: &Path, freq: &str, hour: u32, minute: u32, dest: &Path, keep: u32, html: bool, user: &str, start: &str) -> String {
+    let mut args = vec!["--backup".to_string(), "--scheduled".into(), "--if-due".into(), "--notify".into(),
+                        "--dest".into(), win_quote(&dest.to_string_lossy()), "--format".into(),
+                        (if html { "html" } else { "none" }).into()];
+    if keep > 0 {
+        args.push("--keep".into());
+        args.push(keep.to_string());
+    }
+    let sched = match freq {
+        "weekly" => "<ScheduleByWeek><WeeksInterval>1</WeeksInterval><DaysOfWeek><Monday /></DaysOfWeek></ScheduleByWeek>".to_string(),
+        "monthly" => format!("<ScheduleByMonth><DaysOfMonth><Day>1</Day></DaysOfMonth><Months>{}</Months></ScheduleByMonth>",
+            ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                .iter().map(|m| format!("<{m} />")).collect::<String>()),
+        _ => "<ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>".to_string(),
+    };
+    let user = xml_esc(user);
+    format!(r#"<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>Claude Backup</Author>
+    <Description>Claude Backup — automatski backup Claude istorije. Isključuje se iz aplikacije.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>{start}T{hour:02}:{minute:02}:00</StartBoundary>
+      <Enabled>true</Enabled>
+      {sched}
+    </CalendarTrigger>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{user}</UserId>
+      <Delay>PT2M</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT4H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{cmd}</Command>
+      <Arguments>{args}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"#, cmd = xml_esc(&program.to_string_lossy()), args = xml_esc(&args.join(" ")))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn win_install(env: &Env, program: &Path, freq: &str, hour: u32, minute: u32, dest: &Path, keep: u32, html: bool) -> Result<(), String> {
+    for d in [dest, &env.support] {
+        fs::create_dir_all(d).map_err(|e| format!("Ne mogu da napravim {}: {}", env.tilde(d), os_err(&e)))?;
+    }
+    let user = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
+        (Ok(d), Ok(u)) if !d.is_empty() => format!("{d}\\{u}"),
+        (_, Ok(u)) => u,
+        _ => return Err("Ne znam ime Windows korisnika (USERNAME).".into()),
+    };
+    // prvi termin u budućnosti, da Windows odmah po uključivanju ne „nadoknađuje” današnji
+    let now = Local::now().naive_local();
+    let mut first = now.date().and_hms_opt(hour, minute, 0).unwrap_or(now);
+    if first <= now {
+        first += CDuration::days(1);
+    }
+    let start = first.format("%Y-%m-%d").to_string();
+    let xml = win_task_xml(program, freq, hour, minute, dest, keep, html, &user, &start);
+    // opis podešavanja ide PRE zadatka: ako se zadatak pokrene odmah, --if-due već zna vreme uključivanja
+    let cfg = json!({"freq": freq, "hour": hour, "minute": minute, "dest": dest.to_string_lossy(), "keep": keep,
+                     "html": html, "program": program.to_string_lossy(), "installed": now_iso_utc()});
+    let cfg_path = win_config_path(env);
+    fs::write(&cfg_path, serde_json::to_vec_pretty(&cfg).unwrap()).map_err(|e| os_err(&e))?;
+    // Task Scheduler najpouzdanije čita UTF-16 sa BOM-om
+    let mut bytes = vec![0xFF, 0xFE];
+    for u in xml.encode_utf16() {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    let xml_path = env.support.join("zadatak.xml");
+    fs::write(&xml_path, &bytes).map_err(|e| os_err(&e))?;
+    let out = command("schtasks").args(["/Create", "/TN", WIN_TASK, "/F", "/XML"]).arg(&xml_path).output();
+    let _ = fs::remove_file(&xml_path); // naš privremeni fajl
+    let out = match out {
+        Ok(o) => o,
+        Err(e) => {
+            let _ = fs::remove_file(&cfg_path);
+            return Err(format!("Ne mogu da pokrenem schtasks: {e}"));
+        }
+    };
+    if !out.status.success() {
+        let mut msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if msg.is_empty() {
+            msg = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        }
+        let _ = fs::remove_file(&cfg_path); // naš opis — zadatak nije napravljen
+        return Err(format!("Windows nije prihvatio zakazivanje: {msg}"));
+    }
+    Ok(())
 }
 
 pub fn local_now_naive() -> NaiveDateTime {
@@ -359,4 +572,40 @@ pub fn local_now_naive() -> NaiveDateTime {
 
 pub fn naive_from_str(s: &str) -> Option<NaiveDateTime> {
     NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M").ok().or_else(|| Local.timestamp_opt(0, 0).single().map(|d| d.naive_local()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn quote_windows_args() {
+        assert_eq!(win_quote("C:\\x"), "C:\\x");
+        assert_eq!(win_quote("C:\\Moji backupi"), "\"C:\\Moji backupi\"");
+        assert_eq!(win_quote("D:\\a b\\"), "\"D:\\a b\\\\\"");
+        assert_eq!(win_quote("a\"b c"), "\"a\\\"b c\"");
+    }
+
+    #[test]
+    fn task_xml_has_everything() {
+        let x = win_task_xml(Path::new("C:\\Users\\Pera Perić\\AppData\\Local\\Claude Backup\\claude-backup.exe"), "weekly", 14, 5,
+                             Path::new("C:\\Users\\Pera Perić\\ClaudeBackups"), 14, true, "PC\\Pera & Co", "2026-10-18");
+        assert!(x.contains("<StartBoundary>2026-10-18T14:05:00</StartBoundary>"));
+        assert!(x.contains("<Monday />"));
+        assert!(x.contains("<StartWhenAvailable>true</StartWhenAvailable>"));
+        assert!(x.contains("<UserId>PC\\Pera &amp; Co</UserId>"));
+        assert!(x.contains("--if-due"));
+        assert!(x.contains("--dest &quot;C:\\Users\\Pera Perić\\ClaudeBackups&quot;"));
+        assert!(x.contains("--keep 14"));
+        let m = win_task_xml(Path::new("C:\\a.exe"), "monthly", 3, 0, Path::new("D:\\"), 0, false, "u", "2026-10-18");
+        assert!(m.contains("<Day>1</Day>") && m.contains("<December />") && !m.contains("--keep") && m.contains("--format none"));
+    }
+
+    #[test]
+    fn last_slot_rules() {
+        let now = NaiveDateTime::parse_from_str("2026-10-17 13:00", "%Y-%m-%d %H:%M").unwrap();
+        assert_eq!(last_slot("daily", 14, 0, now).to_string(), "2026-10-16 14:00:00");
+        assert_eq!(last_slot("weekly", 14, 0, now).to_string(), "2026-10-12 14:00:00");
+        assert_eq!(last_slot("monthly", 14, 0, now).to_string(), "2026-10-01 14:00:00");
+    }
 }

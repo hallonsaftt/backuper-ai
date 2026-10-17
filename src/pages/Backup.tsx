@@ -7,6 +7,7 @@ import { Callout, Check, cx, PageHead, rise, Section, Seg, Switch } from "../com
 import { useJob } from "../job";
 import { ago, human, nConvs, nFiles, num } from "../lib/format";
 import type { BackupDone, Estimate, Overview } from "../types";
+import { T } from "../lib/platform";
 
 const PRESETS: [string, string, (id: string) => boolean][] = [
   ["Preporučeno", "rec", () => true],
@@ -172,7 +173,7 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
           <Row title="Markdown (.md)" desc="Svaki razgovor kao .md fajl — za Obsidian, Notion, VS Code ili pretragu.">
             <Switch on={md} onChange={setMd} />
           </Row>
-          <Row title="Pakovanje" desc={zip ? "Jedan .zip fajl — lako se premešta i čuva." : "Običan folder — sve odmah vidljivo u Finderu."}>
+          <Row title="Pakovanje" desc={zip ? "Jedan .zip fajl — lako se premešta i čuva." : `Običan folder — sve odmah vidljivo u ${T.inFm}.`}>
             <Seg
               value={zip ? "zip" : "dir"}
               onChange={(v) => setZip(v === "zip")}

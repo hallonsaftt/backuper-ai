@@ -4,6 +4,7 @@ import { openPath, reveal } from "../api";
 import { human, nFiles, num } from "../lib/format";
 import type { BackupDone } from "../types";
 import { Lines, Seal, rise } from "./ui";
+import { SEP, T } from "../lib/platform";
 
 export function BackupResultView({ done, title, onBack, extra }: { done: BackupDone; title: string; onBack: () => void; extra?: ReactNode }) {
   const r = done.result;
@@ -31,10 +32,10 @@ export function BackupResultView({ done, title, onBack, extra }: { done: BackupD
             </p>
             <div className="mt-6 flex flex-wrap gap-2.5">
               <button className="btn btn-ink" onClick={() => reveal(r.path)}>
-                <FolderSearch size={16} /> Prikaži u Finderu
+                <FolderSearch size={16} /> Prikaži u {T.inFm}
               </button>
               {!r.is_zip && r.has_html && (
-                <button className="btn btn-ghost" onClick={() => openPath(`${r.path}/Pregled.html`)}>
+                <button className="btn btn-ghost" onClick={() => openPath(`${r.path}${SEP}Pregled.html`)}>
                   <BookOpenText size={16} /> Otvori Pregled.html
                 </button>
               )}

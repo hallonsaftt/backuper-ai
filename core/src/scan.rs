@@ -1,13 +1,12 @@
 //! Skeniranje: šta Claude ima na disku. Samo ČITA metapodatke — ništa ne menja.
 
-use crate::env::{is_within, Env};
+use crate::env::{is_within, real, Env};
 use crate::util::*;
 use regex::Regex;
 use serde::Serialize;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -51,7 +50,7 @@ pub const CAT_DEFS: [CatDef; 9] = [
     CatDef { id: "code_sessions", title: "Claude Code razgovori", default: true,
         desc: "Svi razgovori iz terminala i Code taba, po projektima — sa pod-agentima, rezultatima alata i Claude-ovom memorijom projekta. Originalni .jsonl format koji Claude čita (~/.claude/projects)." },
     CatDef { id: "tmp_sessions", title: "Slike i scratchpad iz razgovora", default: true,
-        desc: "Slike koje si nalepio u razgovore i Claude-ovi radni fajlovi (scratchpad). Stoje u /private/tmp i macOS ih briše pri restartu — sačuvaj ih dok postoje." },
+        desc: "Slike koje si nalepio u razgovore i Claude-ovi radni fajlovi (scratchpad). Stoje u privremenom folderu sistema koji se briše pri restartu ili čišćenju diska — sačuvaj ih dok postoje." },
     CatDef { id: "global", title: "Podešavanja, kontekst i istorija", default: true,
         desc: "Globalni CLAUDE.md, settings.json, ~/.claude.json (projekti, MCP serveri), istorija kucanih poruka (history.jsonl), planovi, zadaci i checkpoint snimci za rewind." },
     CatDef { id: "extensions", title: "Skillovi, agenti, komande, pluginovi", default: true,
@@ -168,7 +167,7 @@ impl<'b> Default for WalkOpts<'b> {
 }
 
 fn mtime_ns(m: &fs::Metadata) -> i64 {
-    m.mtime() * 1_000_000_000 + m.mtime_nsec()
+    meta_mtime_ns(m)
 }
 
 impl<'a> Walk<'a> {
@@ -196,7 +195,7 @@ impl<'a> Walk<'a> {
                 cat: cat.into(),
                 size: md.len(),
                 mtime_ns: mtime_ns(&md),
-                mode: md.mode(),
+                mode: meta_mode(&md),
                 proj: o.proj.clone(),
                 link,
             });
@@ -206,8 +205,8 @@ impl<'a> Walk<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn rec(&mut self, d: &Path, rel: &str, arc_root: &str, cat: &str, o: &WalkOpts, seen: &mut HashSet<PathBuf>, out: &mut Vec<FEntry>) {
-        let real = fs::canonicalize(d).unwrap_or_else(|_| d.to_path_buf());
-        if !seen.insert(real) {
+        let d_real = real(d).unwrap_or_else(|_| d.to_path_buf());
+        if !seen.insert(d_real) {
             return;
         }
         let rd = match fs::read_dir(d) {
@@ -269,7 +268,7 @@ impl<'a> Walk<'a> {
                     cat: cat.into(),
                     size: md.len(),
                     mtime_ns: mtime_ns(&md),
-                    mode: md.mode(),
+                    mode: meta_mode(&md),
                     proj: pj,
                     link,
                 });
@@ -326,9 +325,18 @@ pub fn newest_version(files: &[FEntry]) -> String {
 
 pub fn detect_running() -> Vec<String> {
     let mut found = vec![];
+    if cfg!(windows) {
+        // Claude.exe = aplikacija; claude.exe = Claude Code (Windows ne razlikuje velika/mala slova)
+        if let Ok(o) = command("tasklist").args(["/FI", "IMAGENAME eq claude.exe", "/FO", "CSV", "/NH"]).output() {
+            if String::from_utf8_lossy(&o.stdout).to_lowercase().contains("\"claude.exe\"") {
+                found.push("Claude".to_string());
+            }
+        }
+        return found;
+    }
     let me = std::process::id().to_string();
     for (name, label) in [("Claude", "Claude aplikacija"), ("claude", "Claude Code u terminalu")] {
-        if let Ok(o) = std::process::Command::new("pgrep").args(["-x", name]).output() {
+        if let Ok(o) = command("pgrep").args(["-x", name]).output() {
             let s = String::from_utf8_lossy(&o.stdout);
             if s.split_whitespace().any(|p| p.chars().all(|c| c.is_ascii_digit()) && p != me) {
                 found.push(label.to_string());
@@ -397,7 +405,7 @@ pub fn scan(env: &Env) -> Inventory {
             }
         }
         let mut uf = vec![];
-        for p in [env.home.join("Claude"), env.home.join("Documents/Claude")] {
+        for p in [env.home.join("Claude"), env.home.join("Documents").join("Claude")] {
             if p.is_dir() {
                 let arc = format!("original/home/{}", slug(&env.tilde(&p), 80));
                 uf.extend(w.walk(&p, &arc, "user_files", &WalkOpts::default()));
@@ -427,7 +435,7 @@ pub fn scan(env: &Env) -> Inventory {
     if let Some(cj) = load_json(&env.claude_json) {
         if let Some(obj) = cj.get("projects").and_then(|p| p.as_object()) {
             for cwd in obj.keys() {
-                if cwd.starts_with('/') {
+                if Path::new(cwd).is_absolute() {
                     let k = proj_key(cwd);
                     let pr = projects.entry(k.clone()).or_insert_with(|| Proj { key: k, ..Default::default() });
                     if pr.cwd.is_empty() {
@@ -442,8 +450,8 @@ pub fn scan(env: &Env) -> Inventory {
     let mut used = HashSet::new();
     {
         let mut w = Walk { env, problems: &mut problems, excluded: &mut excluded };
-        let home_real = fs::canonicalize(&env.home).unwrap_or(env.home.clone());
-        let claude_real = fs::canonicalize(&c).unwrap_or(c.clone());
+        let home_real = real(&env.home).unwrap_or(env.home.clone());
+        let claude_real = real(&c).unwrap_or(c.clone());
         for pr in projects.values_mut() {
             if pr.cwd.is_empty() {
                 continue;
@@ -467,14 +475,14 @@ pub fn scan(env: &Env) -> Inventory {
             used.insert(s.clone());
             pr.slug = s.clone();
             let arc_base = format!("original/projekti/{s}");
-            let is_home = fs::canonicalize(&root).unwrap_or(root.clone()) == home_real;
+            let is_home = real(&root).unwrap_or(root.clone()) == home_real;
             let wt = |r: &str| -> Option<&'static str> {
                 if r == "worktrees" || r.starts_with("worktrees/") { Some("kopije koda (git worktrees)") } else { None }
             };
             for n in PROJECT_ITEMS {
                 let p = root.join(n);
                 if n == ".claude" {
-                    if is_home || fs::canonicalize(&p).map(|x| x == claude_real).unwrap_or(false) {
+                    if is_home || real(&p).map(|x| x == claude_real).unwrap_or(false) {
                         continue;
                     }
                     pf.extend(w.walk(&p, &format!("{arc_base}/.claude"), "project_files",
@@ -605,8 +613,8 @@ pub fn cat_note(inv: &Inventory, cid: &str, projects: Option<&HashSet<String>>) 
 
 /// Projekat kome pripada folder (ili njegov podfolder). Sam home folder se ne računa kao projekat.
 pub fn project_for_path<'a>(inv: &'a Inventory, path: &Path) -> Option<&'a Proj> {
-    let rp = fs::canonicalize(path).ok()?;
-    let home = fs::canonicalize(&inv.env.home).unwrap_or(inv.env.home.clone());
+    let rp = real(path).ok()?;
+    let home = real(&inv.env.home).unwrap_or(inv.env.home.clone());
     if rp == home {
         return None;
     }
@@ -616,8 +624,8 @@ pub fn project_for_path<'a>(inv: &'a Inventory, path: &Path) -> Option<&'a Proj>
         if p.cwd.is_empty() || p.sessions == 0 {
             continue;
         }
-        let c = fs::canonicalize(&p.cwd).unwrap_or(PathBuf::from(&p.cwd));
-        if c == home || c == Path::new("/") {
+        let c = real(Path::new(&p.cwd)).unwrap_or(PathBuf::from(&p.cwd));
+        if c == home || c.parent().is_none() {
             continue;
         }
         if is_within(&rp, &c) {

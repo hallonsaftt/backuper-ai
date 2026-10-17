@@ -2,6 +2,7 @@ import { ArrowRight, CalendarClock, ChevronRight, FolderGit2, Hourglass, Package
 import { Callout, cx, rise, Seal } from "../components/ui";
 import { ago, fmtWhen, human, nConvs, num, plural, years } from "../lib/format";
 import type { Overview as OV, Page } from "../types";
+import { T } from "../lib/platform";
 
 export function Overview({ ov, go, openProject, refresh }: { ov: OV; go: (p: Page) => void; openProject: (key: string) => void; refresh: () => void }) {
   const today = new Date().toLocaleDateString("sr-Latn-RS", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -89,7 +90,7 @@ export function Overview({ ov, go, openProject, refresh }: { ov: OV; go: (p: Pag
                 )}
               </>
             ) : (
-              "Pravi backup sam — dnevno, nedeljno ili mesečno. Ako je Mac bio ugašen, uradi ga čim ga upališ."
+              `Pravi backup sam — dnevno, nedeljno ili mesečno. Ako je ${T.computer} bio ugašen, uradi ga čim ga upališ.`
             )}
           </Tile>
           <Tile
@@ -142,7 +143,7 @@ export function Overview({ ov, go, openProject, refresh }: { ov: OV; go: (p: Pag
               <ChevronRight size={16} className="text-faint transition-transform group-hover:translate-x-0.5" />
             </button>
           ))}
-          {ov.projects.length === 0 && <div className="px-5 py-6 text-[13px] text-muted">Nema Claude Code projekata na ovom Mac-u.</div>}
+          {ov.projects.length === 0 && <div className="px-5 py-6 text-[13px] text-muted">Nema Claude Code projekata {T.onThis}.</div>}
         </div>
       </section>
     </div>

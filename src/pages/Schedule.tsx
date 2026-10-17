@@ -4,13 +4,15 @@ import { call } from "../api";
 import { DestPicker } from "../components/DestPicker";
 import { Callout, cx, KV, PageHead, rise, Section, Seg } from "../components/ui";
 import { fmtWhen, FREQ_TEXT, pad2 } from "../lib/format";
+import { isMac, isWin, SEP, T } from "../lib/platform";
 import type { Overview, Sched } from "../types";
 
-const PROTECTED = ["/Desktop", "/Documents", "/Downloads"];
+// macOS ne pušta pozadinske programe u ove foldere bez dozvole (na Windowsu toga nema)
+const PROTECTED = isMac ? ["/Desktop", "/Documents", "/Downloads"] : [];
 
 export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => void }) {
   const s0 = ov.schedule;
-  const defDest = ov.dests.find((d) => d.label === "ClaudeBackups")?.path ?? `${ov.home}/ClaudeBackups`;
+  const defDest = ov.dests.find((d) => d.label === "ClaudeBackups")?.path ?? `${ov.home}${SEP}ClaudeBackups`;
   const [st, setSt] = useState<Sched>(s0);
   const [freq, setFreq] = useState(s0.enabled ? s0.freq : "daily");
   const [hour, setHour] = useState(s0.enabled ? s0.hour : 14);
@@ -20,7 +22,7 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
   const [msg, setMsg] = useState<{ tone: "ok" | "err" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const dests = ov.dests.some((d) => d.label === "ClaudeBackups") ? ov.dests : [{ label: "ClaudeBackups", path: defDest, path_tilde: "~/ClaudeBackups", free: 0, kind: "home" }, ...ov.dests];
+  const dests = ov.dests.some((d) => d.label === "ClaudeBackups") ? ov.dests : [{ label: "ClaudeBackups", path: defDest, path_tilde: isWin ? defDest : "~/ClaudeBackups", free: 0, kind: "home" }, ...ov.dests];
   const inProtected = PROTECTED.some((p) => dest.startsWith(ov.home + p));
   const byApp = !st.enabled || st.program === ov.app_path;
   const dirty = !byApp || !st.enabled || st.freq !== freq || st.hour !== hour || st.minute !== minute || st.dest !== dest || st.keep !== keep;
@@ -31,7 +33,7 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
     try {
       const n = await call<Sched>("schedule_set", { freq, hour, minute, dest, keep });
       setSt(n);
-      setMsg({ tone: "ok", text: `Uključeno: ${FREQ_TEXT[freq]} u ${pad2(hour)}:${pad2(minute)}. Ne moraš ništa da pališ — macOS pokreće backup sam.` });
+      setMsg({ tone: "ok", text: `Uključeno: ${FREQ_TEXT[freq]} u ${pad2(hour)}:${pad2(minute)}. Ne moraš ništa da pališ — ${T.os} pokreće backup sam.` });
       onChanged();
     } catch (e) {
       setMsg({ tone: "err", text: String(e) });
@@ -71,7 +73,7 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
             Backup <em className="display-wonk text-accent">sam od sebe</em>
           </>
         }
-        lead="macOS pokreće backup u zadato vreme — aplikacija ne mora da bude otvorena. Stare automatske backupe briše po pravilu ispod; ručne nikad."
+        lead={`${T.os} pokreće backup u zadato vreme — aplikacija ne mora da bude otvorena. Stare automatske backupe briše po pravilu ispod; ručne nikad.`}
       />
 
       {!ov.app_in_applications && ov.is_mac && (
@@ -91,7 +93,7 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2.5">
               <span className="display text-[24px] leading-tight font-[480]">{st.enabled ? (st.broken ? "Pokvareno" : "Uključeno") : "Isključeno"}</span>
-              {st.enabled && <span className={cx("tag", st.loaded ? "tag-ok" : "tag-warn")}>{st.loaded ? "macOS ga je prihvatio" : "nije učitano"}</span>}
+              {st.enabled && <span className={cx("tag", st.loaded ? "tag-ok" : "tag-warn")}>{st.loaded ? `${T.os} ga je prihvatio` : "nije učitano"}</span>}
             </div>
             <div className="mt-0.5 text-[13.5px] text-muted">{st.enabled ? st.describe : "Backup se pravi samo kad ga ti pokreneš."}</div>
           </div>
@@ -170,16 +172,16 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
         </div>
       </Section>
 
-      <Section n="02" title="Šta ako Mac nije uključen?" i={3}>
+      <Section n="02" title={`Šta ako ${T.computer} nije uključen?`} i={3}>
         <div className="grid grid-cols-3 gap-3">
-          <Case icon={<Sun size={19} />} title="Mac radi" text={`Backup se pravi tačno u ${pad2(hour)}:${pad2(minute)}, u pozadini.`} />
-          <Case icon={<Moon size={19} />} title="Mac spava" text="Čim ga probudiš — macOS pokrene propušten termin." />
-          <Case icon={<Power size={19} />} title="Mac je ugašen" text="Čim ga upališ i prijaviš se, aplikacija vidi da je termin propušten i odmah napravi backup." />
+          <Case icon={<Sun size={19} />} title={`${T.Computer} radi`} text={`Backup se pravi tačno u ${pad2(hour)}:${pad2(minute)}, u pozadini.`} />
+          <Case icon={<Moon size={19} />} title={`${T.Computer} spava`} text={`Čim ga probudiš — ${T.os} pokrene propušten termin.`} />
+          <Case icon={<Power size={19} />} title={`${T.Computer} je ugašen`} text="Čim ga upališ i prijaviš se, aplikacija vidi da je termin propušten i odmah napravi backup." />
         </div>
       </Section>
 
-      <Section n="03" title="Gde" hint="preporuka: ~/ClaudeBackups" i={4}>
-        <DestPicker dests={dests} value={dest} onChange={setDest} hint={(d) => (PROTECTED.some((p) => d.path === ov.home + p) ? "dozvola" : null)} />
+      <Section n="03" title="Gde" hint={isWin ? "preporuka: ClaudeBackups u tvom korisničkom folderu" : "preporuka: ~/ClaudeBackups"} i={4}>
+        <DestPicker dests={dests} value={dest} onChange={setDest} createOk hint={(d) => (PROTECTED.some((p) => d.path === ov.home + p) ? "dozvola" : null)} />
         {inProtected && (
           <div className="mt-3">
             <Callout tone="warn" icon={<KeyRound size={17} />} title="Za ovaj folder treba dozvola" action={<button className="btn btn-ghost" onClick={() => call("open_fda_settings")}>Otvori podešavanja</button>}>
@@ -208,11 +210,11 @@ export function Schedule({ ov, onChanged }: { ov: Overview; onChanged: () => voi
         </div>
       </Section>
 
-      <div className="rise mb-8" style={rise(6)}>
+      {isMac && <div className="rise mb-8" style={rise(6)}>
         <Callout tone="info" icon={<KeyRound size={17} />} title="Savet: Full Disk Access" action={<button className="btn btn-ghost" onClick={() => call("open_fda_settings")}>Otvori</button>}>
           Ako su ti projekti na Desktopu ili u Documents, pozadinskom backupu treba dozvola da pročita njihove CLAUDE.md fajlove. Dodaj „Claude Backup” u Pun pristup disku.
         </Callout>
-      </div>
+      </div>}
 
       <div className="flex justify-end gap-3">
         <button className="btn btn-primary btn-lg" onClick={save} disabled={busy || !dirty || (!ov.app_in_applications && ov.is_mac)}>

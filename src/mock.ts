@@ -1,5 +1,28 @@
 // Lažni podaci za pregled interfejsa u običnom pregledaču (bez Tauri-ja). U aplikaciji se ne koristi.
+import { isWin } from "./lib/platform";
 import type { BackupFile, Overview, Proj, Sched } from "./types";
+
+/** U pregledaču sa ?os=windows: putanje kao na Windowsu */
+const PATH_KEYS = new Set(["cwd", "cwd_tilde", "path", "path_tilde", "dir_tilde", "dest", "dest_tilde", "log", "home", "app_path", "program", "describe"]);
+const APP_WIN = "C:\\Users\\petar\\AppData\\Local\\Claude Backup\\claude-backup.exe";
+function winify<T>(v: T): T {
+  if (!isWin) return v;
+  if (Array.isArray(v)) return v.map(winify) as T;
+  if (v && typeof v === "object") {
+    const o: Record<string, unknown> = {};
+    for (const [k, x] of Object.entries(v)) {
+      if (typeof x === "string" && PATH_KEYS.has(k)) {
+        if (k === "program" || k === "app_path") o[k] = APP_WIN;
+        else if (k === "log") o[k] = "C:\\Users\\petar\\AppData\\Roaming\\ClaudeBackupTool\\claude-backup.log";
+        else if (k === "describe") o[k] = x.replace(/~\/ClaudeBackups/, "C:\\Users\\petar\\ClaudeBackups");
+        else o[k] = W(x);
+      } else o[k] = winify(x);
+    }
+    return o as T;
+  }
+  return v;
+}
+const W = (p: string) => (isWin ? p.replace(/^~\//, "C:\\Users\\petar\\").replace(/^\/Users\/petar/, "C:\\Users\\petar").replace(/\//g, "\\") : p);
 
 type Emit = (ev: "job-progress" | "job-done", payload: unknown) => void;
 let emit: Emit = () => {};
@@ -128,7 +151,7 @@ export async function mockCall<T>(cmd: string, args: Record<string, unknown> = {
   const r = (v: unknown) => v as T;
   switch (cmd) {
     case "overview":
-      return r(overview());
+      return r(winify(overview()));
     case "estimate": {
       const cats = (args.cats as string[]) ?? [];
       const o = overview();
@@ -145,7 +168,7 @@ export async function mockCall<T>(cmd: string, args: Record<string, unknown> = {
     case "check_dest":
       return r(null);
     case "list_backups":
-      return r(backups);
+      return r(winify(backups));
     case "project_for_folder":
       return r((args.path as string).includes("novi-sajt") ? null : projects[0].key);
     case "project_preview": {
@@ -208,7 +231,7 @@ export async function mockCall<T>(cmd: string, args: Record<string, unknown> = {
       return r({ ok: true, message: "sačuvano i provereno", backup: "~/.claude/settings.json.pre-claude-backup-20261017-151200", changes: [`"cleanupPeriodDays": ${old ?? "(nije podešeno = 30)"} → ${cleanup}`] });
     }
     case "schedule_get":
-      return r(schedule);
+      return r(winify(schedule));
     case "schedule_set": {
       const a = args as { freq: string; hour: number; minute: number; dest: string; keep: number };
       schedule = { ...schedule, enabled: true, freq: a.freq, hour: a.hour, minute: a.minute, dest: a.dest, dest_tilde: a.dest.replace("/Users/petar", "~"), keep: a.keep };

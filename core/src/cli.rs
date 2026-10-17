@@ -1,4 +1,4 @@
-//! Rad bez prozora: koristi ga zakazani backup (launchd pokreće aplikaciju sa --backup --scheduled …)
+//! Rad bez prozora: koristi ga zakazani backup (launchd / Task Scheduler pokreće aplikaciju sa --backup --scheduled …)
 //! i testovi. Opcije su iste kao kod Python verzije.
 
 use crate::backup::*;
@@ -131,6 +131,8 @@ pub fn run(args: Vec<String>) -> i32 {
         }
     };
     let env = Env::new();
+    #[cfg(windows)]
+    win_stdio(&env, a.scheduled);
     let none = no_progress();
 
     if a.list {
@@ -412,4 +414,34 @@ pub fn run(args: Vec<String>) -> i32 {
     }
     println!("Nema komande. Probaj --help.");
     1
+}
+
+/// Windows: aplikacija nema konzolu. Ručno pokrenuta iz terminala — piše u taj terminal;
+/// pokrenuta iz Task Scheduler-a — piše u dnevnik (claude-backup.log).
+#[cfg(windows)]
+fn win_stdio(env: &Env, scheduled: bool) {
+    use std::os::windows::io::IntoRawHandle;
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Console::{AttachConsole, GetStdHandle, SetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+    unsafe {
+        if scheduled {
+            let log = log_path(env);
+            if let Some(d) = log.parent() {
+                let _ = std::fs::create_dir_all(d);
+            }
+            if std::fs::metadata(&log).map(|m| m.len() > 5_000_000).unwrap_or(false) {
+                let _ = std::fs::rename(&log, log.with_extension("log.old")); // naš dnevnik, da ne raste bez kraja
+            }
+            if let Ok(f) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+                let h = f.into_raw_handle();
+                SetStdHandle(STD_OUTPUT_HANDLE, h as _);
+                SetStdHandle(STD_ERROR_HANDLE, h as _);
+            }
+        } else {
+            let h = GetStdHandle(STD_OUTPUT_HANDLE);
+            if h.is_null() || h == INVALID_HANDLE_VALUE {
+                AttachConsole(ATTACH_PARENT_PROCESS);
+            }
+        }
+    }
 }
