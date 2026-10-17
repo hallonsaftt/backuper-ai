@@ -58,7 +58,7 @@ hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MNT" -quiet
 # ako je aplikacija otvorena, zatvori je (automatski backup u pozadini nastavlja normalno)
 osascript -e 'if application "Claude Backup" is running then tell application "Claude Backup" to quit' > /dev/null 2>&1 || true
 
-say "→ Instaliram u $DEST…"
+say "→ Instaliram u ${DEST}…"
 if [ -d "$DEST/$APP" ]; then
   # stara verzija ide u Otpad, ne briše se
   mv "$DEST/$APP" "$HOME/.Trash/Claude Backup (stara $(date +%Y%m%d-%H%M%S)).app" 2> /dev/null ||
