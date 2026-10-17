@@ -63,14 +63,25 @@ jobs:
           python3 --version | tee -a "$LOG"
           tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a "$LOG"
 
-      - name: Instaler jednom komandom (install.sh, sa poslednjeg release-a)
+      - name: Instaler jednom komandom (install.sh)
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           D="$RUNNER_TEMP/apps"; mkdir -p "$D"
+          check() {
+            "$D/Claude Backup.app/Contents/MacOS/claude-backup" --version | tee -a "$LOG"
+            if xattr -r -p com.apple.quarantine "$D/Claude Backup.app" 2>/dev/null | grep -q .; then echo "✖ quarantine je ostao"; exit 1; fi
+            echo "✔ instalirano, bez quarantine oznake" | tee -a "$LOG"
+          }
+          # 1) upravo napravljen .dmg, označen kao skinut u browseru
+          cp "$DMG_NAME" "$RUNNER_TEMP/dl.dmg"
+          xattr -w com.apple.quarantine "0081;00000000;Safari;" "$RUNNER_TEMP/dl.dmg"
+          CB_DEST="$D" CB_NO_OPEN=1 bash install.sh "$RUNNER_TEMP/dl.dmg" 2>&1 | tee -a "$LOG"
+          check
+          # 2) poslednji release preko GitHub CLI (privatni repo) — preko postojeće instalacije
           CB_DEST="$D" CB_NO_OPEN=1 bash install.sh 2>&1 | tee -a "$LOG"
-          "$D/Claude Backup.app/Contents/MacOS/claude-backup" --version | tee -a "$LOG"
-          if xattr -p com.apple.quarantine "$D/Claude Backup.app" 2>/dev/null; then echo "✖ quarantine je ostao"; exit 1; fi
-          echo "✔ install.sh: instalirano, bez quarantine oznake" | tee -a "$LOG"
+          check
 
       - uses: actions/upload-artifact@v4
         with:

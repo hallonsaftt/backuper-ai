@@ -9,6 +9,7 @@ PY="${2:-}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) WIN=1 ;; *) WIN=0 ;; esac
 if [ "$WIN" = 1 ]; then PYBIN=python; else PYBIN=python3; fi
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8 # imena fajlova sa č/ć/š i na Windowsu
 # putanja kako je vidi program (na Windowsu C:\…)
 wp() { if [ "$WIN" = 1 ]; then cygpath -w "$1"; else printf '%s' "$1"; fi; }
 

@@ -1,7 +1,7 @@
 //! Tauri sloj: komande koje poziva interfejs. Sav posao radi `backup-core`.
 
 use backup_core::backup::{dest_ok, run_backup, BackupOpts, BackupResult};
-use backup_core::env::{expand, real, Env};
+use backup_core::env::{expand, Env};
 use backup_core::restore::{apply_restore, plan_restore, summarize, CatPlan, RItem, RestoreResult};
 use backup_core::retention::{retention_info, set_retention as core_set_retention, RetentionInfo, SetResult};
 use backup_core::scan::*;
@@ -197,6 +197,7 @@ fn volumes() -> Vec<(String, PathBuf)> {
     }
     #[cfg(not(windows))]
     {
+        use backup_core::env::real;
         let mut v = vec![];
         if let Ok(rd) = std::fs::read_dir("/Volumes") {
             let mut vols: Vec<PathBuf> = rd.filter_map(|e| e.ok()).map(|e| e.path()).collect();

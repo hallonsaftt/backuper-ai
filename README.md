@@ -14,9 +14,17 @@ Aplikacija za **Mac (Apple Silicon)** i **Windows 10/11** koja pravi potpun, pro
 
 Najlakše: otvori **Terminal** i nalepi jedan red. Skine poslednju verziju, ubaci je u Applications i otvori — bez „Open Anyway” i bez dodatnih komandi. Isti red služi i za ažuriranje.
 
+Dok je repo privatan (treba [GitHub CLI](https://cli.github.com) i jednom `gh auth login`):
+```
+gh api repos/hallonsaftt/backuper-ai/contents/install.sh -H "Accept: application/vnd.github.raw" | bash
+```
+
+Ako je repo javan:
 ```
 curl -fsSL https://raw.githubusercontent.com/hallonsaftt/backuper-ai/main/install.sh | bash
 ```
+
+Ili skini .dmg u browseru i pusti skriptu da ga instalira: `bash install.sh ~/Downloads/Claude-Backup-AppleSilicon.dmg`
 
 Ručno, preko .dmg-a:
 
