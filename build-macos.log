@@ -1,0 +1,272 @@
+
+added 90 packages, and audited 91 packages in 4s
+
+17 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Compiling[0m backup-core v1.0.0 (/Users/runner/work/backuper-ai/backuper-ai/core)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 7.65s
+[1m[92m     Running[0m unittests src/lib.rs (core/target/debug/deps/backup_core-894349daa4fc1d1d)
+
+running 9 tests
+test env::tests::expand_home ... ok
+test env::tests::within_is_by_components ... ok
+test env::tests::token_roundtrip ... ok
+test i18n::tests::switching ... ok
+test schedule::tests::last_slot_rules ... ok
+test schedule::tests::quote_windows_args ... ok
+test schedule::tests::task_xml_has_everything ... ok
+test util::tests::formats_per_language ... ok
+test retention::tests::keeps_file_style ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m unittests src/bin/cli.rs (core/target/debug/deps/claude_backup_cli-434224c63d284070)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m   Doc-tests[0m backup_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+> claude-backup@1.0.0 tauri
+> tauri build --target aarch64-apple-darwin --bundles app,dmg
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> claude-backup@1.0.0 build
+> tsc --noEmit && vite build
+
+[36mvite v7.3.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 1644 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                                                       [39m[1m[2m  0.40 kB[22m[1m[22m[2m │ gzip:   0.27 kB[22m
+[2mdist/[22m[2massets/[22m[32mjetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      [39m[1m[2m  7.50 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mjetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           [39m[1m[2m  9.00 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mjetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2        [39m[1m[2m 12.11 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mjetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2       [39m[1m[2m 15.20 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32minstrument-sans-latin-ext-standard-normal-C5E2Gvlv.woff2  [39m[1m[2m 18.86 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-vietnamese-full-normal-7BpKI3vF.woff2            [39m[1m[2m 34.31 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-vietnamese-full-italic-BHALq22K.woff2            [39m[1m[2m 40.23 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mjetbrains-mono-latin-wght-normal-B9CIFXIH.woff2           [39m[1m[2m 40.40 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32minstrument-sans-latin-standard-normal-BVScPF0l.woff2      [39m[1m[2m 57.33 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-latin-ext-full-normal-YHFkNujK.woff2             [39m[1m[2m105.24 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-latin-full-normal-CFFu7zhK.woff2                 [39m[1m[2m121.02 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-latin-ext-full-italic-B8-t4Nou.woff2             [39m[1m[2m130.10 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mfraunces-latin-full-italic-D2JnYqd-.woff2                 [39m[1m[2m149.72 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[35mindex-Cc6CeGTY.css                                        [39m[1m[2m 47.71 kB[22m[1m[22m[2m │ gzip:  11.92 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-CU_haXI-.js                                         [39m[1m[2m  0.17 kB[22m[1m[22m[2m │ gzip:   0.17 kB[22m
+[2mdist/[22m[2massets/[22m[36mcore-BEOw45JP.js                                          [39m[1m[2m  0.20 kB[22m[1m[22m[2m │ gzip:   0.15 kB[22m
+[2mdist/[22m[2massets/[22m[36mevent-Gip4rtXm.js                                         [39m[1m[2m  1.12 kB[22m[1m[22m[2m │ gzip:   0.60 kB[22m
+[2mdist/[22m[2massets/[22m[36mmock-VtaH9WrL.js                                          [39m[1m[2m 14.55 kB[22m[1m[22m[2m │ gzip:   5.72 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-DqopA2_B.js                                         [39m[1m[2m334.22 kB[22m[1m[22m[2m │ gzip: 104.22 kB[22m
+[32m✓ built in 2.38s[39m
+[1m[92m   Compiling[0m claude-backup v1.0.0 (/Users/runner/work/backuper-ai/backuper-ai/src-tauri)
+[1m[92m   Compiling[0m backup-core v1.0.0 (/Users/runner/work/backuper-ai/backuper-ai/core)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 3m 16s
+       Built application at: /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/claude-backup
+    Bundling Claude Backup.app (/Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app)
+     Signing with identity "-"
+Signing with identity "-"
+Signing /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup
+/Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup: replacing existing signature
+Signing with identity "-"
+Signing /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app
+/Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app: replacing existing signature
+        Warn skipping app notarization, no APPLE_ID & APPLE_PASSWORD & APPLE_TEAM_ID or APPLE_API_KEY & APPLE_API_ISSUER & APPLE_API_KEY_PATH environment variables found
+    Bundling Claude Backup_1.0.0_aarch64.dmg (/Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Claude Backup_1.0.0_aarch64.dmg)
+     Running bundle_dmg.sh
+    Finished 2 bundles at:
+        /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app (8.92 MiB)
+        /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Claude Backup_1.0.0_aarch64.dmg (4.76 MiB)
+
+src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup: Mach-O 64-bit executable arm64
+Executable=/Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup
+Identifier=com.hallonsaftt.claudebackup
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=69661 flags=0x10002(adhoc,runtime) hashes=2170+3 location=embedded
+Signature=adhoc
+Info.plist entries=16
+TeamIdentifier=not set
+Runtime Version=14.5.0
+Sealed Resources version=2 rules=13 files=1
+Internal requirements count=0 size=12
+Claude Backup app-1.0
+82bc87007e74063c2e9ed9ec2d895357dee901c5db2d3780df277cb988758ee3  Claude-Backup-AppleSilicon.dmg
+Python 3.14.7
+jezik: en
+
+== 1. kompletan backup (zip)
+Backup: /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.pyPx1mKaVL/out/ClaudeBackup_2026-10-17_171419.zip  (106.2 KB)
+Readable: 5 conversations in Overview.html and Markdown
+
+Saved
+✔ Claude Code conversations — 8 files · 86.9 KB
+✔ Settings, context and history — 8 files · 782 B
+✔ Skills, agents, commands, plugins — 7 files · 148 B
+✔ Claude files inside projects — 6 files · 203 B
+✔ Code tab — conversation list — 1 file · 260 B
+✔ Cowork sessions — 4 files · 57.2 MB
+✔ Claude app settings — 3 files · 67 B
+✔ ~/Claude and ~/Documents/Claude folders — 1 file · 17 B
+  [32m✔[0m izvorni fajlovi nisu dirani (sadržaj, vreme, dozvole)
+
+== 2. provera backupa
+✔ The backup is intact
+✔ All 53 files (57.5 MB) are identical to what was saved (SHA-256).
+  53 kontrolnih zbirova se slaže
+  [32m✔[0m nezavisna provera (Python zipfile + SHA256SUMS.txt), bez login tokena
+  [32m✔[0m fajlovi za čitanje su na izabranom jeziku (README.txt)
+
+== 3. backup kao folder, bez čitljivih formata
+✔ Cowork sessions — 4 files · 57.2 MB
+✔ Claude app settings — 3 files · 67 B
+✔ ~/Claude and ~/Documents/Claude folders — 1 file · 17 B
+✔ All 40 files (57.3 MB) are identical to what was saved (SHA-256).
+
+== 4. pokvaren backup mora da padne na proveri
+  [32m✔[0m pokvaren backup je odbijen
+
+== 5. vraćanje: obriši jedan razgovor, pa ga vrati
+To restore: 1 · same: 37 · different (yours stays): 0 · no project: 0 · refused: 0
+Nothing was changed. Add --yes to restore the missing files.
+  [32m✔[0m bez --yes ništa nije vraćeno
+To restore: 1 · same: 37 · different (yours stays): 0 · no project: 0 · refused: 0
+✔ Restored: 1 file
+  [32m✔[0m vraćen fajl je bajt po bajt isti
+  [32m✔[0m posle vraćanja sve je isto kao pre (i datumi izmene)
+To restore: 0 · same: 38 · different (yours stays): 0 · no project: 0 · refused: 0
+✔ Restored: 0 files
+  [32m✔[0m ponovno vraćanje ne menja ništa
+
+== 6. kompatibilnost sa Python skriptom
+✔ Svih 53 fajla (57,5 MB) je identično onome što je sačuvano (SHA-256).
+Backup: /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.pyPx1mKaVL/out/ClaudeBackup_2026-10-17_171419.zip
+Napravljen 17.10.2026. 17:14 na „iad20-eo1213-9775e2c4-48bd-4227-b680-64ecadc01418-266B2A6AFEA0.local”, Claude Code 2.1.250.
+✔ The backup is intact
+✔ All 40 files (57.3 MB) are identical to what was saved (SHA-256).
+  [32m✔[0m aplikacija i skripta čitaju backupe jedna druge
+
+== 7. istorija jednog projekta
+✔ Claude Code conversations — 6 files · 85.0 KB
+✔ Claude files inside projects — 5 files · 191 B
+✔ Settings, context and history — 1 file · 21 B
+✔ Code tab — conversation list — 1 file · 260 B
+  [32m✔[0m claude-history/.gitignore sa * postoji
+✔ All 22 files (253.5 KB) are identical to what was saved (SHA-256).
+
+== 8. čuvanje istorije (cleanupPeriodDays)
+✔ saved and verified
+  "cleanupPeriodDays": (not set = 30) → 3650
+  old file: ~/.claude/settings.json.pre-claude-backup-20261017-171426
+  [32m✔[0m settings.json: samo novi ključ, ostalo isto; napravljena kopija starog
+
+== 9. launchd zakazivanje (informativno)
+✔ every day at 14:00 → /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.pyPx1mKaVL/auto · keeps the last 3 backups
+/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.pyPx1mKaVL/home/Library/LaunchAgents/com.claudebackup.auto.plist: OK
+	state = running
+	program = /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup
+	arguments = {
+	properties = runatload | low priority i/o | inferred program | system service | tle system
+✔ Automatic backup is off. Existing backups stay where they are.
+
+[32mSVE PROVERE SU PROŠLE[0m
+jezik: sr
+
+== 1. kompletan backup (zip)
+Backup: /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.Vm6M9fqqTY/out/ClaudeBackup_2026-10-17_171427.zip  (106,4 KB)
+Čitljivo: 5 razgovora u Pregled.html i Markdown
+
+Sačuvano
+✔ Claude Code razgovori — 8 fajlova · 86,9 KB
+✔ Podešavanja, kontekst i istorija — 8 fajlova · 782 B
+✔ Skillovi, agenti, komande, pluginovi — 7 fajlova · 148 B
+✔ Claude fajlovi u projektima — 6 fajlova · 203 B
+✔ Code tab — lista razgovora — 1 fajl · 260 B
+✔ Cowork sesije — 4 fajla · 57,2 MB
+✔ Podešavanja Claude aplikacije — 3 fajla · 67 B
+✔ Folderi ~/Claude i ~/Documents/Claude — 1 fajl · 17 B
+  [32m✔[0m izvorni fajlovi nisu dirani (sadržaj, vreme, dozvole)
+
+== 2. provera backupa
+✔ Backup je ispravan
+✔ Svih 53 fajla (57,5 MB) je identično onome što je sačuvano (SHA-256).
+  53 kontrolnih zbirova se slaže
+  [32m✔[0m nezavisna provera (Python zipfile + SHA256SUMS.txt), bez login tokena
+  [32m✔[0m fajlovi za čitanje su na izabranom jeziku (PROCITAJ_ME.txt)
+
+== 3. backup kao folder, bez čitljivih formata
+✔ Cowork sesije — 4 fajla · 57,2 MB
+✔ Podešavanja Claude aplikacije — 3 fajla · 67 B
+✔ Folderi ~/Claude i ~/Documents/Claude — 1 fajl · 17 B
+✔ Svih 40 fajlova (57,3 MB) je identično onome što je sačuvano (SHA-256).
+
+== 4. pokvaren backup mora da padne na proveri
+  [32m✔[0m pokvaren backup je odbijen
+
+== 5. vraćanje: obriši jedan razgovor, pa ga vrati
+Za vraćanje: 1 · isto: 37 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+Ništa nije promenjeno. Dodaj --yes da vratiš fajlove koji fale.
+  [32m✔[0m bez --yes ništa nije vraćeno
+Za vraćanje: 1 · isto: 37 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+✔ Vraćeno: 1 fajl
+  [32m✔[0m vraćen fajl je bajt po bajt isti
+  [32m✔[0m posle vraćanja sve je isto kao pre (i datumi izmene)
+Za vraćanje: 0 · isto: 38 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+✔ Vraćeno: 0 fajlova
+  [32m✔[0m ponovno vraćanje ne menja ništa
+
+== 6. kompatibilnost sa Python skriptom
+✔ Svih 53 fajla (57,5 MB) je identično onome što je sačuvano (SHA-256).
+Backup: /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.Vm6M9fqqTY/out/ClaudeBackup_2026-10-17_171427.zip
+Napravljen 17.10.2026. 17:14 na „iad20-eo1213-9775e2c4-48bd-4227-b680-64ecadc01418-266B2A6AFEA0.local”, Claude Code 2.1.250.
+✔ Backup je ispravan
+✔ Svih 40 fajlova (57,3 MB) je identično onome što je sačuvano (SHA-256).
+  [32m✔[0m aplikacija i skripta čitaju backupe jedna druge
+
+== 7. istorija jednog projekta
+✔ Claude Code razgovori — 6 fajlova · 85,0 KB
+✔ Claude fajlovi u projektima — 5 fajlova · 191 B
+✔ Podešavanja, kontekst i istorija — 1 fajl · 21 B
+✔ Code tab — lista razgovora — 1 fajl · 260 B
+  [32m✔[0m claude-istorija/.gitignore sa * postoji
+✔ Svih 22 fajla (253,4 KB) je identično onome što je sačuvano (SHA-256).
+
+== 8. čuvanje istorije (cleanupPeriodDays)
+✔ sačuvano i provereno
+  "cleanupPeriodDays": (nije podešeno = 30) → 3650
+  stari fajl: ~/.claude/settings.json.pre-claude-backup-20261017-171434
+  [32m✔[0m settings.json: samo novi ključ, ostalo isto; napravljena kopija starog
+
+== 9. launchd zakazivanje (informativno)
+✔ svakog dana u 14:00 → /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.Vm6M9fqqTY/auto · čuva 3 poslednja backupa
+/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.Vm6M9fqqTY/home/Library/LaunchAgents/com.claudebackup.auto.plist: OK
+	state = running
+	program = /Users/runner/work/backuper-ai/backuper-ai/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup
+	arguments = {
+	properties = runatload | low priority i/o | inferred program | system service | tle system
+✔ Automatski backup je isključen. Postojeći backupi su ostali gde jesu.
+
+[32mSVE PROVERE SU PROŠLE[0m
+[1m→ Using /Users/runner/work/_temp/dl.dmg[0m
+[1m→ Opening the .dmg…[0m
+[1m→ Installing to /Users/runner/work/_temp/apps…[0m
+[1m✔ Installed: /Users/runner/work/_temp/apps/Claude Backup.app[0m
+Claude Backup app-1.0
+✔ instalirano, bez quarantine oznake
+[1m→ Skidam najnoviju verziju (GitHub CLI)…[0m
+[1m→ Otvaram .dmg…[0m
+[1m→ Instaliram u /Users/runner/work/_temp/apps…[0m
+[1m✔ Instalirano: /Users/runner/work/_temp/apps/Claude Backup.app[0m
+Claude Backup app-1.0
+✔ instalirano, bez quarantine oznake

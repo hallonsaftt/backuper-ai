@@ -1,0 +1,256 @@
+
+added 90 packages, and audited 91 packages in 8s
+
+17 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities
+[1m[92m    Updating[0m crates.io index
+[1m[92m   Compiling[0m backup-core v1.0.0 (D:\a\backuper-ai\backuper-ai\core)
+[1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 11.10s
+[1m[92m     Running[0m unittests src\lib.rs (core\target\debug\deps\backup_core-11c08d5878599276.exe)
+
+running 9 tests
+test env::tests::within_is_by_components ... ok
+test env::tests::expand_home ... ok
+test i18n::tests::switching ... ok
+test env::tests::token_roundtrip ... ok
+test schedule::tests::last_slot_rules ... ok
+test schedule::tests::quote_windows_args ... ok
+test schedule::tests::task_xml_has_everything ... ok
+test util::tests::formats_per_language ... ok
+test retention::tests::keeps_file_style ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[92m     Running[0m unittests src\bin\cli.rs (core\target\debug\deps\claude_backup_cli-78f17b369b8c0d7b.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[92m   Doc-tests[0m backup_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+> claude-backup@1.0.0 tauri
+> tauri build --bundles nsis
+
+        Info Looking up installed tauri packages to check mismatched versions...
+     Running beforeBuildCommand `npm run build`
+
+> claude-backup@1.0.0 build
+> tsc --noEmit && vite build
+
+[36mvite v7.3.7 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 1644 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                                                       [39m[1m[2m  0.41 kB[22m[1m[22m[2m │ gzip:   0.28 kB[22m
+[2mdist/[22m[32massets/jetbrains-mono-vietnamese-wght-normal-Bt-aOZkq.woff2      [39m[1m[2m  7.50 kB[22m[1m[22m
+[2mdist/[22m[32massets/jetbrains-mono-greek-wght-normal-Bw9x6K1M.woff2           [39m[1m[2m  9.00 kB[22m[1m[22m
+[2mdist/[22m[32massets/jetbrains-mono-cyrillic-wght-normal-D73BlboJ.woff2        [39m[1m[2m 12.11 kB[22m[1m[22m
+[2mdist/[22m[32massets/jetbrains-mono-latin-ext-wght-normal-DBQx-q_a.woff2       [39m[1m[2m 15.20 kB[22m[1m[22m
+[2mdist/[22m[32massets/instrument-sans-latin-ext-standard-normal-C5E2Gvlv.woff2  [39m[1m[2m 18.86 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-vietnamese-full-normal-7BpKI3vF.woff2            [39m[1m[2m 34.31 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-vietnamese-full-italic-BHALq22K.woff2            [39m[1m[2m 40.23 kB[22m[1m[22m
+[2mdist/[22m[32massets/jetbrains-mono-latin-wght-normal-B9CIFXIH.woff2           [39m[1m[2m 40.40 kB[22m[1m[22m
+[2mdist/[22m[32massets/instrument-sans-latin-standard-normal-BVScPF0l.woff2      [39m[1m[2m 57.33 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-latin-ext-full-normal-YHFkNujK.woff2             [39m[1m[2m105.24 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-latin-full-normal-CFFu7zhK.woff2                 [39m[1m[2m121.02 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-latin-ext-full-italic-B8-t4Nou.woff2             [39m[1m[2m130.10 kB[22m[1m[22m
+[2mdist/[22m[32massets/fraunces-latin-full-italic-D2JnYqd-.woff2                 [39m[1m[2m149.72 kB[22m[1m[22m
+[2mdist/[22m[35massets/index-Cc6CeGTY.css                                        [39m[1m[2m 47.71 kB[22m[1m[22m[2m │ gzip:  11.92 kB[22m
+[2mdist/[22m[36massets/index-CU_haXI-.js                                         [39m[1m[2m  0.17 kB[22m[1m[22m[2m │ gzip:   0.17 kB[22m
+[2mdist/[22m[36massets/core-BEOw45JP.js                                          [39m[1m[2m  0.20 kB[22m[1m[22m[2m │ gzip:   0.15 kB[22m
+[2mdist/[22m[36massets/event-Gip4rtXm.js                                         [39m[1m[2m  1.12 kB[22m[1m[22m[2m │ gzip:   0.60 kB[22m
+[2mdist/[22m[36massets/mock-VtaH9WrL.js                                          [39m[1m[2m 14.55 kB[22m[1m[22m[2m │ gzip:   5.72 kB[22m
+[2mdist/[22m[36massets/index-DqopA2_B.js                                         [39m[1m[2m334.22 kB[22m[1m[22m[2m │ gzip: 104.22 kB[22m
+[32m✓ built in 3.54s[39m
+[1m[92m   Compiling[0m claude-backup v1.0.0 (D:\a\backuper-ai\backuper-ai\src-tauri)
+[1m[92m   Compiling[0m backup-core v1.0.0 (D:\a\backuper-ai\backuper-ai\core)
+[1m[92m    Finished[0m `release` profile [optimized] target(s) in 3m 38s
+       Built application at: D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe
+        Info Patching D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe with bundle type information: nsis
+        Info Verifying NSIS package
+ Downloading https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.13/nsis-3.13.zip
+        Info validating hash
+        Info extracting NSIS
+ Downloading https://github.com/tauri-apps/nsis-tauri-utils/releases/download/nsis_tauri_utils-v0.5.3/nsis_tauri_utils.dll
+        Info validating hash
+        Info Target: x64
+     Running makensis to produce D:\a\backuper-ai\backuper-ai\src-tauri\target\release\bundle\nsis\Claude Backup_1.0.0_x64-setup.exe
+    Finished 1 bundle at:
+        D:\a\backuper-ai\backuper-ai\src-tauri\target\release\bundle\nsis\Claude Backup_1.0.0_x64-setup.exe (3.62 MiB)
+
+total 3708
+drwxr-xr-x 1 runneradmin 197121       0 Oct 17 17:15 .
+drwxr-xr-x 1 runneradmin 197121       0 Oct 17 17:15 ..
+-rwxr-xr-x 1 runneradmin 197121 3794726 Oct 17 17:15 Claude Backup_1.0.0_x64-setup.exe
+Claude Backup app-1.0
+83a1d277a386e700e40d44a606ed8bfb38a8746401f5451f6f428dce942f1e9c *Claude-Backup-Windows-Setup.exe
+jezik: en
+
+== 1. kompletan backup (zip)
+Backup: C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\out\ClaudeBackup_2026-10-17_171513.zip  (106.3 KB)
+Readable: 5 conversations in Overview.html and Markdown
+
+Saved
+✔ Claude Code conversations — 8 files · 86.9 KB
+✔ Settings, context and history — 8 files · 806 B
+✔ Skills, agents, commands, plugins — 7 files · 160 B
+✔ Claude files inside projects — 6 files · 210 B
+✔ Code tab — conversation list — 1 file · 257 B
+✔ Cowork sessions — 4 files · 57.2 MB
+✔ Claude app settings — 3 files · 67 B
+✔ ~/Claude and ~/Documents/Claude folders — 1 file · 17 B
+  [32m✔[0m izvorni fajlovi nisu dirani (sadržaj, vreme, dozvole)
+
+== 2. provera backupa
+✔ The backup is intact
+✔ All 53 files (57.5 MB) are identical to what was saved (SHA-256).
+  53 kontrolnih zbirova se slaže
+  [32m✔[0m nezavisna provera (Python zipfile + SHA256SUMS.txt), bez login tokena
+  [32m✔[0m fajlovi za čitanje su na izabranom jeziku (README.txt)
+
+== 3. backup kao folder, bez čitljivih formata
+✔ Cowork sessions — 4 files · 57.2 MB
+✔ Claude app settings — 3 files · 67 B
+✔ ~/Claude and ~/Documents/Claude folders — 1 file · 17 B
+✔ All 40 files (57.3 MB) are identical to what was saved (SHA-256).
+
+== 4. pokvaren backup mora da padne na proveri
+  [32m✔[0m pokvaren backup je odbijen
+
+== 5. vraćanje: obriši jedan razgovor, pa ga vrati
+To restore: 1 · same: 37 · different (yours stays): 0 · no project: 0 · refused: 0
+Nothing was changed. Add --yes to restore the missing files.
+  [32m✔[0m bez --yes ništa nije vraćeno
+To restore: 1 · same: 37 · different (yours stays): 0 · no project: 0 · refused: 0
+✔ Restored: 1 file
+  [32m✔[0m vraćen fajl je bajt po bajt isti
+  [32m✔[0m posle vraćanja sve je isto kao pre (i datumi izmene)
+To restore: 0 · same: 38 · different (yours stays): 0 · no project: 0 · refused: 0
+✔ Restored: 0 files
+  [32m✔[0m ponovno vraćanje ne menja ništa
+
+== 7. istorija jednog projekta
+✔ Claude Code conversations — 6 files · 85.0 KB
+✔ Claude files inside projects — 5 files · 197 B
+✔ Settings, context and history — 1 file · 22 B
+✔ Code tab — conversation list — 1 file · 257 B
+  [32m✔[0m claude-history/.gitignore sa * postoji
+✔ All 22 files (254.0 KB) are identical to what was saved (SHA-256).
+
+== 8. čuvanje istorije (cleanupPeriodDays)
+✔ saved and verified
+  "cleanupPeriodDays": (not set = 30) → 3650
+  old file: C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\home\.claude\settings.json.pre-claude-backup-20261017-171517
+  [32m✔[0m settings.json: samo novi ključ, ostalo isto; napravljena kopija starog
+
+== 9. Task Scheduler zakazivanje
+✔ every Monday at 14:00 → C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\auto · keeps the last 3 backups
+TaskName:                             ClaudeBackup\Auto backup
+Next Run Time:                        10/19/2026 2:00:00 PM
+Status:                               Ready
+Task To Run:                          D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe --backup --scheduled --if-due --notify --dest C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\auto --format html --keep 3
+Schedule Type:                        Weekly
+TaskName:                             ClaudeBackup\Auto backup
+Next Run Time:                        10/19/2026 2:00:00 PM
+Status:                               Ready
+Task To Run:                          D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe --backup --scheduled --if-due --notify --dest C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\auto --format html --keep 3
+Schedule Type:                        At logon time
+  [32m✔[0m Windows je prihvatio zadatak
+  [32m✔[0m podešavanje zapamćeno
+Automatic backup
+  every Monday at 14:00 → C:\Users\RUNNER~1\AppData\Local\Temp\tmp.PYkTtnRHYE\auto · keeps the last 3 backups
+✔ Automatic backup is off. Existing backups stay where they are.
+  [32m✔[0m isključivanje uklanja zadatak
+
+[32mSVE PROVERE SU PROŠLE[0m
+jezik: sr
+
+== 1. kompletan backup (zip)
+Backup: C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\out\ClaudeBackup_2026-10-17_171519.zip  (106,4 KB)
+Čitljivo: 5 razgovora u Pregled.html i Markdown
+
+Sačuvano
+✔ Claude Code razgovori — 8 fajlova · 86,9 KB
+✔ Podešavanja, kontekst i istorija — 8 fajlova · 806 B
+✔ Skillovi, agenti, komande, pluginovi — 7 fajlova · 160 B
+✔ Claude fajlovi u projektima — 6 fajlova · 210 B
+✔ Code tab — lista razgovora — 1 fajl · 257 B
+✔ Cowork sesije — 4 fajla · 57,2 MB
+✔ Podešavanja Claude aplikacije — 3 fajla · 67 B
+✔ Folderi ~/Claude i ~/Documents/Claude — 1 fajl · 17 B
+  [32m✔[0m izvorni fajlovi nisu dirani (sadržaj, vreme, dozvole)
+
+== 2. provera backupa
+✔ Backup je ispravan
+✔ Svih 53 fajla (57,5 MB) je identično onome što je sačuvano (SHA-256).
+  53 kontrolnih zbirova se slaže
+  [32m✔[0m nezavisna provera (Python zipfile + SHA256SUMS.txt), bez login tokena
+  [32m✔[0m fajlovi za čitanje su na izabranom jeziku (PROCITAJ_ME.txt)
+
+== 3. backup kao folder, bez čitljivih formata
+✔ Cowork sesije — 4 fajla · 57,2 MB
+✔ Podešavanja Claude aplikacije — 3 fajla · 67 B
+✔ Folderi ~/Claude i ~/Documents/Claude — 1 fajl · 17 B
+✔ Svih 40 fajlova (57,3 MB) je identično onome što je sačuvano (SHA-256).
+
+== 4. pokvaren backup mora da padne na proveri
+  [32m✔[0m pokvaren backup je odbijen
+
+== 5. vraćanje: obriši jedan razgovor, pa ga vrati
+Za vraćanje: 1 · isto: 37 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+Ništa nije promenjeno. Dodaj --yes da vratiš fajlove koji fale.
+  [32m✔[0m bez --yes ništa nije vraćeno
+Za vraćanje: 1 · isto: 37 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+✔ Vraćeno: 1 fajl
+  [32m✔[0m vraćen fajl je bajt po bajt isti
+  [32m✔[0m posle vraćanja sve je isto kao pre (i datumi izmene)
+Za vraćanje: 0 · isto: 38 · drugačije (ostaje tvoje): 0 · bez projekta: 0 · odbijeno: 0
+✔ Vraćeno: 0 fajlova
+  [32m✔[0m ponovno vraćanje ne menja ništa
+
+== 7. istorija jednog projekta
+✔ Claude Code razgovori — 6 fajlova · 85,0 KB
+✔ Claude fajlovi u projektima — 5 fajlova · 197 B
+✔ Podešavanja, kontekst i istorija — 1 fajl · 22 B
+✔ Code tab — lista razgovora — 1 fajl · 257 B
+  [32m✔[0m claude-istorija/.gitignore sa * postoji
+✔ Svih 22 fajla (253,9 KB) je identično onome što je sačuvano (SHA-256).
+
+== 8. čuvanje istorije (cleanupPeriodDays)
+✔ sačuvano i provereno
+  "cleanupPeriodDays": (nije podešeno = 30) → 3650
+  stari fajl: C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\home\.claude\settings.json.pre-claude-backup-20261017-171523
+  [32m✔[0m settings.json: samo novi ključ, ostalo isto; napravljena kopija starog
+
+== 9. Task Scheduler zakazivanje
+✔ svakog ponedeljka u 14:00 → C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\auto · čuva 3 poslednja backupa
+TaskName:                             ClaudeBackup\Auto backup
+Next Run Time:                        10/19/2026 2:00:00 PM
+Status:                               Ready
+Task To Run:                          D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe --backup --scheduled --if-due --notify --dest C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\auto --format html --keep 3
+Schedule Type:                        Weekly
+TaskName:                             ClaudeBackup\Auto backup
+Next Run Time:                        10/19/2026 2:00:00 PM
+Status:                               Ready
+Task To Run:                          D:\a\backuper-ai\backuper-ai\src-tauri\target\release\claude-backup.exe --backup --scheduled --if-due --notify --dest C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\auto --format html --keep 3
+Schedule Type:                        At logon time
+  [32m✔[0m Windows je prihvatio zadatak
+  [32m✔[0m podešavanje zapamćeno
+Automatski backup
+  svakog ponedeljka u 14:00 → C:\Users\RUNNER~1\AppData\Local\Temp\tmp.83Gbypae8R\auto · čuva 3 poslednja backupa
+✔ Automatski backup je isključen. Postojeći backupi su ostali gde jesu.
+  [32m✔[0m isključivanje uklanja zadatak
+
+[32mSVE PROVERE SU PROŠLE[0m
+instaler: izlazni kod 0
+Claude Backup app-1.0
+✔ instalirano u C:\Users\runneradmin\AppData\Local\Claude Backup\claude-backup.exe
