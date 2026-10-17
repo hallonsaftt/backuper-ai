@@ -201,7 +201,7 @@ pub fn apply_restore(rd: &mut Reader, items: &mut [RItem], cats: Option<&[String
             if copy.is_err() || !hash_ok {
                 drop(dst);
                 let _ = fs::remove_file(&t); // samo fajl koji smo upravo mi napravili
-                return Err(copy.err().unwrap_or_else(|| io::Error::other("kontrolni zbir se ne slaže")));
+                return Err(copy.err().unwrap_or_else(|| io::Error::other(crate::i18n::t("kontrolni zbir se ne slaže", "checksum doesn't match"))));
             }
             let mt = e["mtime_ns"].as_i64().unwrap_or(0).max(0) as u64;
             let when = UNIX_EPOCH + Duration::from_nanos(mt);

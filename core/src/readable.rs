@@ -2,6 +2,8 @@
 
 use crate::env::Env;
 use crate::scan::{load_json, uuid_re, FEntry, Inventory};
+use crate::i18n::t as tr;
+use crate::tf;
 use crate::util::*;
 use base64::Engine;
 use regex::Regex;
@@ -124,7 +126,7 @@ fn result_parts(content: Option<&Value>) -> Vec<Part> {
                 Some("text") => Part::Text(b.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()),
                 Some("image") => match image_of(b) {
                     Some((m, d)) => Part::Image(m, d),
-                    None => Part::Text("[slika]".into()),
+                    None => Part::Text(tr("[slika]", "[image]").into()),
                 },
                 _ => Part::Text(if b.is_string() { b.as_str().unwrap().to_string() } else { pretty(b) }),
             })
@@ -251,7 +253,7 @@ pub fn parse_conv(path: &Path, kind: &str, proj: &str, titles: &HashMap<String, 
                 c.turns.push(Turn {
                     role: "divider".into(),
                     ts: ts.clone(),
-                    items: vec![Item::new(Kind::Notice, "Razgovor je sažet (compact) — Claude nastavlja na osnovu sažetka")],
+                    items: vec![Item::new(Kind::Notice, tr("Razgovor je sažet (compact) — Claude nastavlja na osnovu sažetka", "The conversation was compacted — Claude continues from a summary"))],
                 });
             } else if s("level") == "error" || s("level") == "warning" || st == "api_error" || st == "local_command" {
                 let txt = strip_reminders(&s("content"));
@@ -325,7 +327,7 @@ pub fn parse_conv(path: &Path, kind: &str, proj: &str, titles: &HashMap<String, 
                     }
                     _ => {
                         let mut it = Item::new(Kind::Raw, pretty(b));
-                        it.name = if bt.is_empty() { "podaci".into() } else { bt.into() };
+                        it.name = if bt.is_empty() { tr("podaci", "data").into() } else { bt.into() };
                         c.turns[ti].items.push(it);
                     }
                 }
@@ -358,7 +360,7 @@ pub fn parse_conv(path: &Path, kind: &str, proj: &str, titles: &HashMap<String, 
                         } else {
                             let ti = cur(&mut c, "assistant", &ts);
                             let mut it = Item::new(Kind::Tool, "");
-                            it.name = "rezultat alata".into();
+                            it.name = tr("rezultat alata", "tool result").into();
                             it.result = parts;
                             it.is_error = err;
                             c.turns[ti].items.push(it);
@@ -384,14 +386,14 @@ pub fn parse_conv(path: &Path, kind: &str, proj: &str, titles: &HashMap<String, 
                                 i.image = Some(img);
                                 i
                             }
-                            None => Item::new(Kind::Notice, "[slika]"),
+                            None => Item::new(Kind::Notice, tr("[slika]", "[image]")),
                         };
                         c.turns[ti].items.push(it);
                     }
                     "document" => {
                         let ti = cur(&mut c, "user", &ts);
                         let title = b.get("title").and_then(|x| x.as_str()).map(|t| format!(": {t}")).unwrap_or_default();
-                        c.turns[ti].items.push(Item::new(Kind::Notice, format!("[priložen dokument{title}]")));
+                        c.turns[ti].items.push(Item::new(Kind::Notice, tf!("[priložen dokument{}]", "[attached document{}]", title)));
                     }
                     _ => {
                         let ti = cur(&mut c, "user", &ts);
@@ -413,7 +415,7 @@ pub fn parse_conv(path: &Path, kind: &str, proj: &str, titles: &HashMap<String, 
         .or_else(|| titles.get(&c.sid).cloned())
         .or(ai)
         .or(summary)
-        .unwrap_or_else(|| if first_line.is_empty() { "(bez naslova)".into() } else { first_line });
+        .unwrap_or_else(|| if first_line.is_empty() { tr("(bez naslova)", "(untitled)").into() } else { first_line });
     c.title = title.trim().to_string();
     Some(c)
 }
@@ -586,7 +588,7 @@ fn html_input(inp: &Value) -> String {
 }
 
 fn html_img(mt: &str, data: &str) -> String {
-    format!("<img class=\"shot\" alt=\"slika\" src=\"data:{};base64,{}\">", esc(mt), data)
+    format!("<img class=\"shot\" alt=\"{}\" src=\"data:{};base64,{}\">", tr("slika", "image"), esc(mt), data)
 }
 
 fn html_item(it: &Item) -> String {
@@ -601,24 +603,26 @@ fn html_item(it: &Item) -> String {
         Kind::Command => format!("<div class=\"cmd\">{}</div>", esc(&it.text)),
         Kind::Output => format!("<pre>{}</pre>", esc(&it.text)),
         Kind::Thinking => format!(
-            "<details class=\"think\"><summary>Razmišljanje</summary><div class=\"body\"><div class=\"md\">{}</div></div></details>",
+            "<details class=\"think\"><summary>{}</summary><div class=\"body\"><div class=\"md\">{}</div></div></details>",
+            tr("Razmišljanje", "Thinking"),
             esc(&it.text)
         ),
         Kind::Image => it.image.as_ref().map(|(m, d)| html_img(m, d)).unwrap_or_default(),
         Kind::Notice => format!("<div class=\"notice{}\">{}</div>", if it.is_error { " err" } else { "" }, esc(&it.text)),
         Kind::Summary => format!(
-            "<details><summary>Sažetak ranijeg dela razgovora</summary><div class=\"body\">{}</div></details>",
+            "<details><summary>{}</summary><div class=\"body\">{}</div></details>",
+            tr("Sažetak ranijeg dela razgovora", "Summary of the earlier part of the conversation"),
             md_to_html(&it.text)
         ),
         Kind::Tool => {
             let hint = tool_hint(&it.data);
             let mut body = String::new();
             if let Some(d) = &it.data {
-                body.push_str("<div class=\"label\">Ulaz</div>");
+                body.push_str(tr("<div class=\"label\">Ulaz</div>", "<div class=\"label\">Input</div>"));
                 body.push_str(&html_input(d));
             }
             if !it.result.is_empty() {
-                body.push_str("<div class=\"label\">Rezultat</div>");
+                body.push_str(tr("<div class=\"label\">Rezultat</div>", "<div class=\"label\">Result</div>"));
                 for p in &it.result {
                     match p {
                         Part::Image(m, d) => body.push_str(&html_img(m, d)),
@@ -631,13 +635,13 @@ fn html_item(it: &Item) -> String {
                 if it.is_error { " err" } else { "" },
                 esc(&it.name),
                 if hint.is_empty() { String::new() } else { format!(" <code>{}</code>", esc(&hint)) },
-                if it.is_error { " — greška" } else { "" },
+                if it.is_error { tr(" — greška", " — error") } else { "" },
                 body
             )
         }
         Kind::Raw => format!(
             "<details><summary>{}</summary><div class=\"body\"><pre>{}</pre></div></details>",
-            esc(if it.name.is_empty() { "podaci" } else { &it.name }),
+            esc(if it.name.is_empty() { tr("podaci", "data") } else { &it.name }),
             esc(&it.text)
         ),
     }
@@ -645,8 +649,8 @@ fn html_item(it: &Item) -> String {
 
 fn html_page(title: &str, body: &str) -> Vec<u8> {
     format!(
-        "<!doctype html><html lang=\"sr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{}</style></head><body><div class=\"wrap\">{}</div></body></html>",
-        esc(title), CSS, body
+        "<!doctype html><html lang=\"{}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title><style>{}</style></head><body><div class=\"wrap\">{}</div></body></html>",
+        crate::i18n::lang(), esc(title), CSS, body
     )
     .into_bytes()
 }
@@ -673,27 +677,32 @@ fn count_role(c: &Conv, role: &str) -> u64 {
 
 pub fn html_conv(c: &Conv, back: &str, env: &Env) -> Vec<u8> {
     let mut meta: Vec<(String, String)> = vec![
-        ("Projekat".into(), if c.cwd.is_empty() { "—".into() } else { env.tilde(Path::new(&c.cwd)) }),
-        ("Početak".into(), fmt_ts(&c.start, true)),
-        ("Poslednja poruka".into(), fmt_ts(&c.end, true)),
-        ("Poruke".into(), format!("ti: {} · Claude: {}", count_role(c, "user"), count_role(c, "assistant"))),
-        ("Izvor".into(), source_label(c)),
+        (tr("Projekat", "Project").into(), if c.cwd.is_empty() { "—".into() } else { env.tilde(Path::new(&c.cwd)) }),
+        (tr("Početak", "Started").into(), fmt_ts(&c.start, true)),
+        (tr("Poslednja poruka", "Last message").into(), fmt_ts(&c.end, true)),
+        (tr("Poruke", "Messages").into(), tf!("ti: {} · Claude: {}", "you: {} · Claude: {}", count_role(c, "user"), count_role(c, "assistant"))),
+        (tr("Izvor", "Source").into(), source_label(c)),
         ("Model".into(), if c.models.is_empty() { "—".into() } else { c.models.join(", ") }),
         ("Session ID".into(), c.sid.clone()),
         ("Original".into(), c.arc.clone()),
     ];
     if c.bad > 0 {
-        let verb = plural_word(c.bad, "nije mogao", "nisu mogla", "nije moglo");
-        meta.push(("Napomena".into(), format!(
-            "{} u originalu {} da se prikaže (original je sačuvan netaknut)",
-            plural(c.bad, "oštećen red", "oštećena reda", "oštećenih redova"), verb)));
+        let note = if crate::i18n::sr() {
+            format!("{} u originalu {} da se prikaže (original je sačuvan netaknut)",
+                    pl(c.bad, ("oštećen red", "oštećena reda", "oštećenih redova"), ("", "")),
+                    plural_word(c.bad, "nije mogao", "nisu mogla", "nije moglo"))
+        } else {
+            format!("{} in the original couldn't be shown (the original is saved untouched)",
+                    pl(c.bad, ("", "", ""), ("damaged line", "damaged lines")))
+        };
+        meta.push((tr("Napomena", "Note").into(), note));
     }
     let dl: String = meta.iter().map(|(k, v)| format!("<dt>{}</dt><dd>{}</dd>", esc(k), esc(v))).collect();
     let mut parts = vec![
-        format!("<a class=\"back\" href=\"{}\">← Svi razgovori</a>", back),
+        format!("<a class=\"back\" href=\"{}\">{}</a>", back, tr("← Svi razgovori", "← All conversations")),
         format!(
-            "<header class=\"head\"><h1>{}</h1><dl class=\"meta\">{}</dl><div class=\"resume\">Nastavi ovaj razgovor u terminalu:<code>{}</code></div></header>",
-            esc(&c.title), dl, esc(&resume_cmd(c))
+            "<header class=\"head\"><h1>{}</h1><dl class=\"meta\">{}</dl><div class=\"resume\">{}<code>{}</code></div></header>",
+            esc(&c.title), dl, tr("Nastavi ovaj razgovor u terminalu:", "Continue this conversation in a terminal:"), esc(&resume_cmd(c))
         ),
     ];
     for t in &c.turns {
@@ -703,7 +712,7 @@ pub fn html_conv(c: &Conv, back: &str, env: &Env) -> Vec<u8> {
             }
             continue;
         }
-        let who = if t.role == "user" { "Ti" } else { "Claude" };
+        let who = if t.role == "user" { tr("Ti", "You") } else { "Claude" };
         let inner: String = t.items.iter().map(html_item).collect();
         parts.push(format!(
             "<section class=\"turn {}\"><div class=\"who\"><span>{}</span><time>{}</time></div><div class=\"bubble\">{}</div></section>",
@@ -718,13 +727,14 @@ pub fn html_index(groups: &[(String, Vec<(&Conv, String)>)], created: &str, has_
     let mut starts: Vec<_> = convs.iter().filter_map(|c| parse_ts(&c.start)).collect();
     starts.sort();
     let period = match (starts.first(), starts.last()) {
-        (Some(a), Some(b)) => format!("{} – {}", a.format("%d.%m.%Y."), b.format("%d.%m.%Y.")),
+        (Some(a), Some(b)) => format!("{} – {}", a.format(tr("%d.%m.%Y.", "%b %-d, %Y")), b.format(tr("%d.%m.%Y.", "%b %-d, %Y"))),
         _ => "—".into(),
     };
     let msgs: u64 = convs.iter().map(|c| count_role(c, "user")).sum();
     let tiles = format!(
-        "<div class=\"tiles\"><div class=\"tile\"><b>{}</b><span>razgovora</span></div><div class=\"tile\"><b>{}</b><span>projekata</span></div><div class=\"tile\"><b>{}</b><span>tvojih poruka</span></div><div class=\"tile\"><b style=\"font-size:15px\">{}</b><span>period</span></div></div>",
-        num(convs.len() as u64), num(groups.len() as u64), num(msgs), esc(&period)
+        "<div class=\"tiles\"><div class=\"tile\"><b>{}</b><span>{}</span></div><div class=\"tile\"><b>{}</b><span>{}</span></div><div class=\"tile\"><b>{}</b><span>{}</span></div><div class=\"tile\"><b style=\"font-size:15px\">{}</b><span>{}</span></div></div>",
+        num(convs.len() as u64), tr("razgovora", "conversations"), num(groups.len() as u64), tr("projekata", "projects"),
+        num(msgs), tr("tvojih poruka", "your messages"), esc(&period), tr("period", "period")
     );
     let mut rows = String::new();
     for (label, lst) in groups {
@@ -734,8 +744,9 @@ pub fn html_index(groups: &[(String, Vec<(&Conv, String)>)], created: &str, has_
             let s = esc(&format!("{} {} {}", c.title, snippet, label).to_lowercase());
             let sub = if !snippet.is_empty() && snippet != c.title { format!("<div class=sub>{}</div>", esc(&snippet)) } else { String::new() };
             trs.push_str(&format!(
-                "<tr data-s=\"{}\"><td class=\"d\">{}</td><td><a href=\"{}\">{}</a><span class=\"badge\">{}</span>{}</td><td class=\"n\">{} poruka</td></tr>",
-                s, esc(&fmt_ts(&c.start, false)), esc(href), esc(&c.title), esc(&source_label(c)), sub, count_role(c, "user")
+                "<tr data-s=\"{}\"><td class=\"d\">{}</td><td><a href=\"{}\">{}</a><span class=\"badge\">{}</span>{}</td><td class=\"n\">{}</td></tr>",
+                s, esc(&fmt_ts(&c.start, false)), esc(href), esc(&c.title), esc(&source_label(c)), sub,
+                pl(count_role(c, "user"), ("poruka", "poruke", "poruka"), ("message", "messages"))
             ));
         }
         rows.push_str(&format!(
@@ -745,14 +756,20 @@ pub fn html_index(groups: &[(String, Vec<(&Conv, String)>)], created: &str, has_
     }
     let js = "<script>const q=document.getElementById('q');q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();document.querySelectorAll('.proj').forEach(g=>{let any=false;g.querySelectorAll('tr[data-s]').forEach(r=>{const m=!v||r.dataset.s.includes(v);r.hidden=!m;if(m)any=true;});g.hidden=!any;if(v&&any)g.open=true;});});</script>";
     let body = format!(
-        "<h1>Claude razgovori</h1><div class=\"note\">Backup napravljen {}. Originalni Claude fajlovi su u folderu <code>original/</code> — vidi PROCITAJ_ME.txt.{}</div>{}<input id=\"q\" type=\"search\" placeholder=\"Pretraži naslove, poruke i projekte…\" autocomplete=\"off\">{}{}",
-        esc(created),
-        if has_md { " Markdown verzija je u folderu <code>citljivo-md/</code>." } else { "" },
+        "<h1>{}</h1><div class=\"note\">{}</div>{}<input id=\"q\" type=\"search\" placeholder=\"{}\" autocomplete=\"off\">{}{}",
+        tr("Claude razgovori", "Claude conversations"),
+        {
+            let nm = crate::i18n::names();
+            let md_note = if has_md { tf!(" Markdown verzija je u folderu <code>{}/</code>.", " The Markdown version is in the <code>{}/</code> folder.", nm.md_dir) } else { String::new() };
+            tf!("Backup napravljen {}. Originalni Claude fajlovi su u folderu <code>original/</code> — vidi {}.{}",
+                "Backup made {}. The original Claude files are in the <code>original/</code> folder — see {}.{}", esc(created), nm.readme, md_note)
+        },
         tiles,
-        if rows.is_empty() { "<p class=note>Nema razgovora u ovom backupu.</p>".to_string() } else { rows },
+        tr("Pretraži naslove, poruke i projekte…", "Search titles, messages and projects…"),
+        if rows.is_empty() { tf!("<p class=note>{}</p>", "<p class=note>{}</p>", tr("Nema razgovora u ovom backupu.", "No conversations in this backup.")) } else { rows },
         js
     );
-    html_page("Claude razgovori", &body)
+    html_page(tr("Claude razgovori", "Claude conversations"), &body)
 }
 
 // ---------------------------------------------------------------- Markdown
@@ -779,15 +796,15 @@ pub fn md_conv(c: &Conv, env: &Env, put_image: &mut dyn FnMut(&str, &str) -> Str
         String::new(),
         "| | |".into(),
         "|---|---|".into(),
-        format!("| Projekat | `{}` |", if c.cwd.is_empty() { "—".into() } else { env.tilde(Path::new(&c.cwd)) }),
-        format!("| Početak | {} |", fmt_ts(&c.start, true)),
-        format!("| Poslednja poruka | {} |", fmt_ts(&c.end, true)),
-        format!("| Izvor | {} |", source_label(c)),
+        format!("| {} | `{}` |", tr("Projekat", "Project"), if c.cwd.is_empty() { "—".into() } else { env.tilde(Path::new(&c.cwd)) }),
+        format!("| {} | {} |", tr("Početak", "Started"), fmt_ts(&c.start, true)),
+        format!("| {} | {} |", tr("Poslednja poruka", "Last message"), fmt_ts(&c.end, true)),
+        format!("| {} | {} |", tr("Izvor", "Source"), source_label(c)),
         format!("| Model | {} |", if c.models.is_empty() { "—".into() } else { c.models.join(", ") }),
         format!("| Session ID | `{}` |", c.sid),
         format!("| Original | `{}` |", c.arc),
         String::new(),
-        "Nastavi u terminalu:".into(),
+        tr("Nastavi u terminalu:", "Continue in a terminal:").into(),
         String::new(),
         fence(&resume_cmd(c), "bash"),
         String::new(),
@@ -798,14 +815,14 @@ pub fn md_conv(c: &Conv, env: &Env, put_image: &mut dyn FnMut(&str, &str) -> Str
         if t.role == "divider" {
             for it in &t.items {
                 if it.kind == Kind::Summary {
-                    l.extend(["<details><summary>Sažetak ranijeg dela razgovora</summary>".into(), String::new(), it.text.clone(), String::new(), "</details>".into(), String::new()]);
+                    l.extend([format!("<details><summary>{}</summary>", tr("Sažetak ranijeg dela razgovora", "Summary of the earlier part of the conversation")), String::new(), it.text.clone(), String::new(), "</details>".into(), String::new()]);
                 } else {
                     l.extend([format!("--- *{}* ---", it.text), String::new()]);
                 }
             }
             continue;
         }
-        l.extend([format!("## {} · {}", if t.role == "user" { "🧑 Ti" } else { "🤖 Claude" }, fmt_ts(&t.ts, true)), String::new()]);
+        l.extend([format!("## {} · {}", if t.role == "user" { crate::i18n::t("🧑 Ti", "🧑 You") } else { "🤖 Claude" }, fmt_ts(&t.ts, true)), String::new()]);
         for it in &t.items {
             match it.kind {
                 Kind::Text => l.extend([it.text.clone(), String::new()]),
@@ -814,7 +831,7 @@ pub fn md_conv(c: &Conv, env: &Env, put_image: &mut dyn FnMut(&str, &str) -> Str
                     String::new(),
                 ]),
                 Kind::Output => l.extend([fence(&it.text, ""), String::new()]),
-                Kind::Thinking => l.extend(["<details><summary>Razmišljanje</summary>".into(), String::new(), it.text.clone(), String::new(), "</details>".into(), String::new()]),
+                Kind::Thinking => l.extend([format!("<details><summary>{}</summary>", tr("Razmišljanje", "Thinking")), String::new(), it.text.clone(), String::new(), "</details>".into(), String::new()]),
                 Kind::Image => {
                     if let Some((m, d)) = &it.image {
                         let rel = put_image(m, d);
@@ -828,14 +845,14 @@ pub fn md_conv(c: &Conv, env: &Env, put_image: &mut dyn FnMut(&str, &str) -> Str
                         "🔧 {}{}{}",
                         it.name,
                         if hint.is_empty() { String::new() } else { format!(" — {}", esc(&hint)) },
-                        if it.is_error { " — greška" } else { "" }
+                        if it.is_error { tr(" — greška", " — error") } else { "" }
                     );
                     l.extend([format!("<details><summary>{summ}</summary>"), String::new()]);
                     if let Some(d) = &it.data {
-                        l.extend(["**Ulaz**".into(), String::new(), md_input(d), String::new()]);
+                        l.extend([tr("**Ulaz**", "**Input**").into(), String::new(), md_input(d), String::new()]);
                     }
                     if !it.result.is_empty() {
-                        l.extend(["**Rezultat**".into(), String::new()]);
+                        l.extend([tr("**Rezultat**", "**Result**").into(), String::new()]);
                         for p in &it.result {
                             match p {
                                 Part::Image(m, d) => {
@@ -849,7 +866,7 @@ pub fn md_conv(c: &Conv, env: &Env, put_image: &mut dyn FnMut(&str, &str) -> Str
                     l.extend(["</details>".into(), String::new()]);
                 }
                 Kind::Summary | Kind::Raw => l.extend([
-                    format!("<details><summary>{}</summary>", if it.name.is_empty() { "podaci" } else { &it.name }),
+                    format!("<details><summary>{}</summary>", if it.name.is_empty() { tr("podaci", "data") } else { &it.name }),
                     String::new(),
                     fence(&it.text, "json"),
                     String::new(),
@@ -873,6 +890,7 @@ pub fn build_readable(
     rep: &Reporter,
 ) -> io::Result<usize> {
     let env = &inv.env;
+    let nm = crate::i18n::names();
     let mut srcs: Vec<(&FEntry, &str)> = vec![];
     for e in entries {
         let n = e.name();
@@ -947,8 +965,8 @@ pub fn build_readable(
             rep.emit("render", gi as f64 / ng as f64, labels[*key].clone(), c.title.clone(), false);
             let dir = &dirs[*key];
             if html {
-                let href = format!("citljivo-html/{dir}/{fname}.html");
-                gen(&href, html_conv(c, "../../Pregled.html", env))?;
+                let href = format!("{}/{dir}/{fname}.html", nm.html_dir);
+                gen(&href, html_conv(c, &format!("../../{}", nm.overview), env))?;
                 hg.push((c, href));
             }
             if md {
@@ -963,20 +981,20 @@ pub fn build_readable(
                         "image/webp" => "webp",
                         _ => "png",
                     };
-                    let rel = format!("slike/{sid8}-{counter}.{ext}");
+                    let rel = format!("{}/{sid8}-{counter}.{ext}", tr("slike", "images"));
                     match base64::engine::general_purpose::STANDARD.decode(data.trim()) {
                         Ok(bytes) => {
-                            imgs.push((format!("citljivo-md/{dir}/{rel}"), bytes));
+                            imgs.push((format!("{}/{dir}/{rel}", nm.md_dir), bytes));
                             rel
                         }
-                        Err(_) => "(slika nije mogla da se dekodira)".into(),
+                        Err(_) => tr("(slika nije mogla da se dekodira)", "(the image couldn't be decoded)").into(),
                     }
                 };
                 let body = md_conv(c, env, &mut put);
                 for (arc, bytes) in imgs {
                     gen(&arc, bytes)?;
                 }
-                gen(&format!("citljivo-md/{dir}/{fname}.md"), body)?;
+                gen(&format!("{}/{dir}/{fname}.md", nm.md_dir), body)?;
                 md_rows.push((labels[*key].clone(), c, format!("{dir}/{fname}.md")));
             }
         }
@@ -984,21 +1002,22 @@ pub fn build_readable(
             html_groups.push((labels[*key].clone(), hg));
         }
     }
-    let created = chrono::Local::now().format("%d.%m.%Y. u %H:%M").to_string();
+    let created = chrono::Local::now().format(tr("%d.%m.%Y. u %H:%M", "%b %-d, %Y at %H:%M")).to_string();
     if html {
-        gen("Pregled.html", html_index(&html_groups, &created, md))?;
+        gen(nm.overview, html_index(&html_groups, &created, md))?;
     }
     if md {
-        let mut l = vec!["# Claude razgovori".to_string(), String::new(), format!("{} · backup napravljen {}", n_convs(convs.len() as u64), created), String::new()];
+        let mut l = vec![tr("# Claude razgovori", "# Claude conversations").to_string(), String::new(),
+                         tf!("{} · backup napravljen {}", "{} · backup made {}", n_convs(convs.len() as u64), created), String::new()];
         let mut last = String::new();
         for (label, c, rel) in &md_rows {
             if *label != last {
-                l.extend([String::new(), format!("## {label}"), String::new(), "| Datum | Razgovor | Izvor | Poruka |".into(), "|---|---|---|---|".into()]);
+                l.extend([String::new(), format!("## {label}"), String::new(), tr("| Datum | Razgovor | Izvor | Poruka |", "| Date | Conversation | Source | Messages |").into(), "|---|---|---|---|".into()]);
                 last = label.clone();
             }
             l.push(format!("| {} | [{}]({}) | {} | {} |", fmt_ts(&c.start, false), c.title.replace('|', "/"), rel.replace(' ', "%20"), source_label(c), count_role(c, "user")));
         }
-        gen("citljivo-md/INDEX.md", (l.join("\n") + "\n").into_bytes())?;
+        gen(&format!("{}/INDEX.md", nm.md_dir), (l.join("\n") + "\n").into_bytes())?;
     }
     Ok(convs.len())
 }

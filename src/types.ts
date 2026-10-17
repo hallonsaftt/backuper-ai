@@ -40,7 +40,7 @@ export interface BackupFile {
   is_zip: boolean;
   mtime: number;
   when: string;
-  kind: "ručni" | "automatski" | "projekat" | string;
+  kind: "manual" | "auto" | "project" | string;
 }
 
 export interface Retention {
@@ -135,6 +135,7 @@ export interface BackupResult {
   convs: number;
   has_html: boolean;
   has_md: boolean;
+  overview?: string;
   verify: VerifyResult;
   failed: [string, string][];
   unstable: string[];

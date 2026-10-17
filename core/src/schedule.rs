@@ -3,6 +3,8 @@
 
 use crate::env::{uid, Env};
 use crate::scan::load_json;
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use chrono::{Datelike, Duration as CDuration, Local, NaiveDateTime, TimeZone};
 use serde::Serialize;
@@ -23,7 +25,13 @@ pub fn log_path(env: &Env) -> PathBuf {
     env.home.join("Library/Logs/claude-backup.log")
 }
 /// Windows: zadatak u Task Scheduler-u i naš opis podešavanja (Task Scheduler ga ne čuva u čitljivom obliku)
-pub const WIN_TASK: &str = "ClaudeBackup\\Automatski backup";
+pub const WIN_TASK: &str = "ClaudeBackup\\Auto backup";
+/// name used by the first Windows build — still recognised and cleaned up
+pub const WIN_TASK_OLD: &str = "ClaudeBackup\\Automatski backup";
+
+fn win_task_exists(name: &str) -> bool {
+    command("schtasks").args(["/Query", "/TN", name]).output().map(|o| o.status.success()).unwrap_or(false)
+}
 pub fn win_config_path(env: &Env) -> PathBuf {
     env.support.join("schedule.json")
 }
@@ -72,9 +80,9 @@ pub struct LastRun {
 
 pub fn freq_text(freq: &str) -> &'static str {
     match freq {
-        "daily" => "svakog dana",
-        "weekly" => "svakog ponedeljka",
-        _ => "1. u mesecu",
+        "daily" => t("svakog dana", "every day"),
+        "weekly" => t("svakog ponedeljka", "every Monday"),
+        _ => t("1. u mesecu", "on the 1st of the month"),
     }
 }
 
@@ -117,7 +125,7 @@ pub fn schedule_status(env: &Env) -> SchedStatus {
             }
             None => st.broken = true,
         }
-        st.loaded = command("schtasks").args(["/Query", "/TN", WIN_TASK]).output().map(|o| o.status.success()).unwrap_or(false);
+        st.loaded = win_task_exists(WIN_TASK) || win_task_exists(WIN_TASK_OLD);
         st.describe = describe(&st);
         return st;
     }
@@ -168,11 +176,11 @@ pub fn schedule_status(env: &Env) -> SchedStatus {
 
 pub fn describe(st: &SchedStatus) -> String {
     let keep = if st.keep == 0 {
-        "čuva sve".to_string()
+        t("čuva sve", "keeps all").to_string()
     } else {
-        format!("čuva {}", plural(st.keep as u64, "poslednji backup", "poslednja backupa", "poslednjih backupa"))
+        tf!("čuva {}", "keeps the last {}", pl(st.keep as u64, ("poslednji backup", "poslednja backupa", "poslednjih backupa"), ("backup", "backups")))
     };
-    format!("{} u {:02}:{:02} → {} · {}", freq_text(&st.freq), st.hour, st.minute, st.dest_tilde, keep)
+    tf!("{} u {:02}:{:02} → {} · {}", "{} at {:02}:{:02} → {} · {}", freq_text(&st.freq), st.hour, st.minute, st.dest_tilde, keep)
 }
 
 /// Pravi macOS LaunchAgent koji pokreće OVU aplikaciju u pozadini (bez prozora).
@@ -182,17 +190,19 @@ pub fn install_schedule(env: &Env, program: &Path, freq: &str, hour: u32, minute
         return win_install(env, program, freq, hour, minute, dest, keep, html);
     }
     if !cfg!(target_os = "macos") && std::env::var("CLAUDE_BACKUP_FAKE_MAC").is_err() {
-        return Err("Automatski backup preko launchd radi samo na macOS-u.".into());
+        return Err(t("Automatski backup preko launchd radi samo na macOS-u.", "Automatic backup via launchd only works on macOS.").into());
     }
     let ps = program.to_string_lossy();
     if ps.starts_with("/Volumes/") || ps.contains("/AppTranslocation/") {
-        return Err("Prvo prevuci Claude Backup u folder Applications (Programi), pa ga otvori odande — \
-                    zakazivanje mora da zna stalnu lokaciju aplikacije.".into());
+        return Err(t("Prvo prevuci Claude Backup u folder Applications (Programi), pa ga otvori odande — \
+                      zakazivanje mora da zna stalnu lokaciju aplikacije.",
+                     "First drag Claude Backup into the Applications folder and open it from there — \
+                      scheduling needs to know the app's permanent location.").into());
     }
     let p = plist_path(env);
     let log = log_path(env);
     for d in [dest, &env.support, log.parent().unwrap(), p.parent().unwrap()] {
-        fs::create_dir_all(d).map_err(|e| format!("Ne mogu da napravim {}: {}", env.tilde(d), os_err(&e)))?;
+        fs::create_dir_all(d).map_err(|e| tf!("Ne mogu da napravim {}: {}", "Can't create {}: {}", env.tilde(d), os_err(&e)))?;
     }
     let mut args: Vec<plist::Value> = vec![
         ps.to_string().into(), "--backup".into(), "--scheduled".into(), "--if-due".into(), "--notify".into(),
@@ -228,7 +238,7 @@ pub fn install_schedule(env: &Env, program: &Path, freq: &str, hour: u32, minute
     d.insert("Nice".into(), 10i64.into());
     d.insert("RunAtLoad".into(), true.into());
     d.insert("EnvironmentVariables".into(), plist::Value::Dictionary(envd));
-    plist::Value::Dictionary(d).to_file_xml(&p).map_err(|e| format!("Ne mogu da upišem {}: {e}", env.tilde(&p)))?;
+    plist::Value::Dictionary(d).to_file_xml(&p).map_err(|e| tf!("Ne mogu da upišem {}: {}", "Can't write {}: {}", env.tilde(&p), e))?;
     let target = format!("gui/{}", uid());
     launchctl(&["bootout", &format!("{target}/{SCHED_LABEL}")]);
     let (mut rc, mut err) = launchctl(&["bootstrap", &target, &p.to_string_lossy()]);
@@ -236,25 +246,26 @@ pub fn install_schedule(env: &Env, program: &Path, freq: &str, hour: u32, minute
         (rc, err) = launchctl(&["load", "-w", &p.to_string_lossy()]);
     }
     if rc != 0 {
-        return Err(format!("macOS nije prihvatio zakazivanje: {err}"));
+        return Err(tf!("macOS nije prihvatio zakazivanje: {}", "macOS didn't accept the schedule: {}", err));
     }
     Ok(())
 }
 
 pub fn remove_schedule(env: &Env) -> Result<String, String> {
     if cfg!(windows) {
-        let exists = command("schtasks").args(["/Query", "/TN", WIN_TASK]).output().map(|o| o.status.success()).unwrap_or(false);
-        if exists {
-            let o = command("schtasks").args(["/Delete", "/TN", WIN_TASK, "/F"]).output().map_err(|e| e.to_string())?;
-            if !o.status.success() {
-                return Err(format!("Windows nije uklonio zadatak: {}", String::from_utf8_lossy(&o.stderr).trim()));
+        for name in [WIN_TASK, WIN_TASK_OLD] {
+            if win_task_exists(name) {
+                let o = command("schtasks").args(["/Delete", "/TN", name, "/F"]).output().map_err(|e| e.to_string())?;
+                if !o.status.success() {
+                    return Err(tf!("Windows nije uklonio zadatak: {}", "Windows didn't remove the task: {}", String::from_utf8_lossy(&o.stderr).trim()));
+                }
             }
         }
         let cp = win_config_path(env);
         if cp.is_file() {
             fs::remove_file(&cp).map_err(|e| os_err(&e))?; // samo naš opis podešavanja
         }
-        return Ok("Automatski backup je isključen. Postojeći backupi su ostali gde jesu.".into());
+        return Ok(t("Automatski backup je isključen. Postojeći backupi su ostali gde jesu.", "Automatic backup is off. Existing backups stay where they are.").into());
     }
     let p = plist_path(env);
     let (rc, _) = launchctl(&["bootout", &format!("gui/{}/{}", uid(), SCHED_LABEL)]);
@@ -267,18 +278,19 @@ pub fn remove_schedule(env: &Env) -> Result<String, String> {
             .and_then(|v| v.as_dictionary().and_then(|d| d.get("Label")).and_then(|l| l.as_string()).map(|s| s == SCHED_LABEL))
             .unwrap_or(false);
         if !ours {
-            return Err("Fajl zakazivanja nije napravio ovaj program — ne diram ga.".into());
+            return Err(t("Fajl zakazivanja nije napravio ovaj program — ne diram ga.", "That schedule file wasn't made by this program — leaving it alone.").into());
         }
-        fs::remove_file(&p).map_err(|e| format!("Ne mogu da uklonim {}: {}", env.tilde(&p), os_err(&e)))?; // samo naš fajl
+        fs::remove_file(&p).map_err(|e| tf!("Ne mogu da uklonim {}: {}", "Can't remove {}: {}", env.tilde(&p), os_err(&e)))?; // samo naš fajl
     }
-    Ok("Automatski backup je isključen. Postojeći backupi su ostali gde jesu.".into())
+    Ok(t("Automatski backup je isključen. Postojeći backupi su ostali gde jesu.", "Automatic backup is off. Existing backups stay where they are.").into())
 }
 
 pub fn run_schedule_now(env: &Env) -> Result<(), String> {
     let _ = fs::create_dir_all(&env.support);
     let _ = fs::write(force_flag_path(env), "1"); // znak da ovo pokretanje ne čeka termin
     if cfg!(windows) {
-        let o = command("schtasks").args(["/Run", "/TN", WIN_TASK]).output().map_err(|e| e.to_string())?;
+        let name = if win_task_exists(WIN_TASK) { WIN_TASK } else { WIN_TASK_OLD };
+        let o = command("schtasks").args(["/Run", "/TN", name]).output().map_err(|e| e.to_string())?;
         return if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) };
     }
     let (rc, err) = launchctl(&["kickstart", "-k", &format!("gui/{}/{}", uid(), SCHED_LABEL)]);
@@ -316,7 +328,7 @@ pub fn schedule_due(env: &Env, now: Option<NaiveDateTime>) -> (bool, String) {
     let now = now.unwrap_or_else(|| Local::now().naive_local());
     let st = schedule_status(env);
     if !st.enabled || st.broken {
-        return (true, "nema podataka o zakazivanju — pravim backup".into());
+        return (true, t("nema podataka o zakazivanju — pravim backup", "no schedule info — making a backup").into());
     }
     let slot = last_slot(&st.freq, st.hour, st.minute, now);
     let installed = fs::metadata(if cfg!(windows) { win_config_path(env) } else { plist_path(env) })
@@ -325,18 +337,18 @@ pub fn schedule_due(env: &Env, now: Option<NaiveDateTime>) -> (bool, String) {
         .map(|t| chrono::DateTime::<Local>::from(t).naive_local())
         .unwrap_or(NaiveDateTime::MIN);
     if slot < installed {
-        return (false, "od uključivanja još nije bilo termina — preskačem".into());
+        return (false, t("od uključivanja još nije bilo termina — preskačem", "no scheduled time has passed since it was turned on — skipping").into());
     }
     if let Some(lr) = &st.last_run {
         if lr.ok {
             if let Some(t) = parse_ts(&lr.time) {
                 if t.naive_local() >= slot {
-                    return (false, format!("backup za termin {} je već napravljen — preskačem", slot.format("%d.%m.%Y. %H:%M")));
+                    return (false, tf!("backup za termin {} je već napravljen — preskačem", "the backup for {} is already done — skipping", slot.format(crate::i18n::t("%d.%m.%Y. %H:%M", "%b %-d, %Y %H:%M"))));
                 }
             }
         }
     }
-    (true, format!("termin {} nema backup — pravim ga", slot.format("%d.%m.%Y. %H:%M")))
+    (true, tf!("termin {} nema backup — pravim ga", "{} has no backup yet — making it", slot.format(t("%d.%m.%Y. %H:%M", "%b %-d, %Y %H:%M"))))
 }
 
 /// Briše najstarije AUTOMATSKE backupe preko `keep`. Dira SAMO ClaudeBackup_*.zip čiji MANIFEST kaže
@@ -466,7 +478,7 @@ pub fn win_task_xml(program: &Path, freq: &str, hour: u32, minute: u32, dest: &P
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Author>Claude Backup</Author>
-    <Description>Claude Backup — automatski backup Claude istorije. Isključuje se iz aplikacije.</Description>
+    <Description>{desc}</Description>
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
@@ -513,18 +525,19 @@ pub fn win_task_xml(program: &Path, freq: &str, hour: u32, minute: u32, dest: &P
     </Exec>
   </Actions>
 </Task>
-"#, cmd = xml_esc(&program.to_string_lossy()), args = xml_esc(&args.join(" ")))
+"#, cmd = xml_esc(&program.to_string_lossy()), args = xml_esc(&args.join(" ")),
+       desc = t("Claude Backup — automatski backup Claude istorije. Isključuje se iz aplikacije.", "Claude Backup — automatic backup of your Claude history. Turn it off from the app."))
 }
 
 #[allow(clippy::too_many_arguments)]
 fn win_install(env: &Env, program: &Path, freq: &str, hour: u32, minute: u32, dest: &Path, keep: u32, html: bool) -> Result<(), String> {
     for d in [dest, &env.support] {
-        fs::create_dir_all(d).map_err(|e| format!("Ne mogu da napravim {}: {}", env.tilde(d), os_err(&e)))?;
+        fs::create_dir_all(d).map_err(|e| tf!("Ne mogu da napravim {}: {}", "Can't create {}: {}", env.tilde(d), os_err(&e)))?;
     }
     let user = match (std::env::var("USERDOMAIN"), std::env::var("USERNAME")) {
         (Ok(d), Ok(u)) if !d.is_empty() => format!("{d}\\{u}"),
         (_, Ok(u)) => u,
-        _ => return Err("Ne znam ime Windows korisnika (USERNAME).".into()),
+        _ => return Err(t("Ne znam ime Windows korisnika (USERNAME).", "Can't tell the Windows user name (USERNAME).").into()),
     };
     // prvi termin u budućnosti, da Windows odmah po uključivanju ne „nadoknađuje” današnji
     let now = Local::now().naive_local();
@@ -552,7 +565,7 @@ fn win_install(env: &Env, program: &Path, freq: &str, hour: u32, minute: u32, de
         Ok(o) => o,
         Err(e) => {
             let _ = fs::remove_file(&cfg_path);
-            return Err(format!("Ne mogu da pokrenem schtasks: {e}"));
+            return Err(tf!("Ne mogu da pokrenem schtasks: {}", "Can't run schtasks: {}", e));
         }
     };
     if !out.status.success() {
@@ -561,7 +574,10 @@ fn win_install(env: &Env, program: &Path, freq: &str, hour: u32, minute: u32, de
             msg = String::from_utf8_lossy(&out.stdout).trim().to_string();
         }
         let _ = fs::remove_file(&cfg_path); // naš opis — zadatak nije napravljen
-        return Err(format!("Windows nije prihvatio zakazivanje: {msg}"));
+        return Err(tf!("Windows nije prihvatio zakazivanje: {}", "Windows didn't accept the schedule: {}", msg));
+    }
+    if win_task_exists(WIN_TASK_OLD) {
+        let _ = command("schtasks").args(["/Delete", "/TN", WIN_TASK_OLD, "/F"]).output(); // naš stari zadatak
     }
     Ok(())
 }

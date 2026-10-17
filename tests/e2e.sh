@@ -24,6 +24,12 @@ if [ "$WIN" = 1 ]; then
 else
   export HOME="$H" CLAUDE_CODE_TMPDIR="$H/tmp"
 fi
+# jezik programa (en podrazumevano, sr) — isto kao da je izabran u aplikaciji
+CB_LANG="${CB_LANG:-en}"
+mkdir -p "$H/Library/Application Support/ClaudeBackupTool"
+printf '{"lang": "%s"}\n' "$CB_LANG" > "$H/Library/Application Support/ClaudeBackupTool/prefs.json"
+if [ "$CB_LANG" = sr ]; then PD=claude-istorija; README=PROCITAJ_ME.txt; else PD=claude-history; README=README.txt; fi
+echo "jezik: $CB_LANG"
 ok() { printf '  \033[32m✔\033[0m %s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
 
@@ -33,7 +39,7 @@ import hashlib, os, sys
 root = sys.argv[1]
 for d, ds, fs in os.walk(root):
     ds.sort()
-    if "claude-istorija" in d.split(os.sep):
+    if "claude-istorija" in d.split(os.sep) or "claude-history" in d.split(os.sep) or "ClaudeBackupTool" in d.split(os.sep):
         continue
     for f in sorted(fs):
         p = os.path.join(d, f)
@@ -72,6 +78,12 @@ diff "$W/s0" "$W/s1" && ok "izvorni fajlovi nisu dirani (sadržaj, vreme, dozvol
 step "2. provera backupa"
 "$A" --verify "$(wp "$Z")" | tail -n 3
 zipcheck "$Z" && ok "nezavisna provera (Python zipfile + SHA256SUMS.txt), bez login tokena"
+"$PYBIN" - "$(wp "$Z")" "$README" <<'PY'
+import sys, zipfile
+names = zipfile.ZipFile(sys.argv[1]).namelist()
+assert any(n.endswith("/" + sys.argv[2]) for n in names), f"nema {sys.argv[2]}"
+PY
+ok "fajlovi za čitanje su na izabranom jeziku ($README)"
 
 step "3. backup kao folder, bez čitljivih formata"
 "$A" --backup --folder --format none --dest "$(wp "$W/out2")" | tail -n 3
@@ -115,8 +127,8 @@ fi
 
 step "7. istorija jednog projekta"
 "$A" --project-backup "$(wp "$H/www/POSCafe")" | tail -n 4
-test -f "$H/www/POSCafe/claude-istorija/.gitignore" && grep -qx '\*' "$H/www/POSCafe/claude-istorija/.gitignore" && ok ".gitignore sa * postoji"
-"$A" --verify "$(wp "$(ls -d "$H"/www/POSCafe/claude-istorija/ClaudeBackup_*)")" | tail -n 1
+test -f "$H/www/POSCafe/$PD/.gitignore" && grep -qx '\*' "$H/www/POSCafe/$PD/.gitignore" && ok "$PD/.gitignore sa * postoji"
+"$A" --verify "$(wp "$(ls -d "$H"/www/POSCafe/$PD/ClaudeBackup_*)")" | tail -n 1
 
 step "8. čuvanje istorije (cleanupPeriodDays)"
 "$A" --set-retention 3650 | tail -n 4
@@ -141,7 +153,7 @@ fi
 
 if [ "$WIN" = 1 ]; then
   step "9. Task Scheduler zakazivanje"
-  TASK='ClaudeBackup\Automatski backup'
+  TASK='ClaudeBackup\Auto backup'
   "$A" --schedule weekly --at 14:00 --keep 3 --dest "$(wp "$W/auto")"
   MSYS_NO_PATHCONV=1 schtasks /Query /TN "$TASK" /V /FO LIST | grep -E "TaskName|Next Run Time|Status|Task To Run|Schedule Type" || true
   MSYS_NO_PATHCONV=1 schtasks /Query /TN "$TASK" > /dev/null && ok "Windows je prihvatio zadatak"

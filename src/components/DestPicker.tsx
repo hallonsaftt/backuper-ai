@@ -2,6 +2,7 @@ import { FolderOpen, FolderPlus, HardDrive, Monitor, Usb } from "lucide-react";
 import { useEffect, useState } from "react";
 import { call, pickFolder } from "../api";
 import { human } from "../lib/format";
+import { L } from "../lib/i18n";
 import type { Dest } from "../types";
 import { cx } from "./ui";
 
@@ -21,7 +22,7 @@ export function DestPicker({ dests, value, onChange, hint, createOk }: { dests: 
   }, [value]);
 
   const choose = async () => {
-    const p = await pickFolder("Gde da sačuvam backup?");
+    const p = await pickFolder(L("Gde da sačuvam backup?", "Where should the backup go?"));
     if (p) {
       setCustom(p);
       onChange(p);
@@ -52,24 +53,24 @@ export function DestPicker({ dests, value, onChange, hint, createOk }: { dests: 
             >
               <div className="flex w-full items-center justify-between">
                 <Ic size={18} className={on ? "text-accent" : "text-muted"} />
-                {d.kind === "volume" && <span className="tag">disk</span>}
+                {d.kind === "volume" && <span className="tag">{L("disk", "drive")}</span>}
                 {h && <span className="tag tag-warn">{h}</span>}
               </div>
               <div className="min-w-0">
                 <div className="truncate text-[13.5px] font-[600]">{d.label}</div>
                 <div className="mono truncate text-[11px] text-muted">{d.path_tilde}</div>
               </div>
-              {d.free > 0 && <div className="num text-[11px] text-faint">{human(d.free)} slobodno</div>}
+              {d.free > 0 && <div className="num text-[11px] text-faint">{human(d.free)} {L("slobodno", "free")}</div>}
             </button>
           );
         })}
         <button type="button" onClick={choose} className="flex min-h-[112px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line-2 text-[13px] text-muted transition-colors hover:border-ink hover:text-ink">
           <FolderPlus size={19} />
-          Drugi folder…
+          {L("Drugi folder…", "Another folder…")}
         </button>
       </div>
-      {err && (createOk && err.startsWith("Taj folder ne postoji") ? (
-        <div className="mt-2 text-[12.5px] text-muted">Folder još ne postoji — napraviću ga.</div>
+      {err && (createOk && /^(Taj folder ne postoji|That folder doesn't exist)/.test(err) ? (
+        <div className="mt-2 text-[12.5px] text-muted">{L("Folder još ne postoji — napraviću ga.", "The folder doesn't exist yet — it will be created.")}</div>
       ) : (
         <div className="mt-2 text-[12.5px] text-err">{err}</div>
       ))}

@@ -2,17 +2,28 @@ import { ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useJob } from "../job";
 import { Spinner } from "./ui";
+import { L } from "../lib/i18n";
 import { T } from "../lib/platform";
 
-const PHASE: Record<string, [string, string]> = {
-  copy: ["Kopiram i proveravam", "Svaki fajl se čita, kopira i odmah proverava SHA-256 zbirom."],
-  read: ["Čitam razgovore", "Pripremam čitljivu verziju — originali ostaju netaknuti."],
-  render: ["Pravim čitljivu verziju", "Pregled.html i Markdown, da razgovore možeš da čitaš bez Claude-a."],
-  verify: ["Proveravam backup", "Ponovo čitam svaki fajl iz gotovog backupa i upoređujem SHA-256."],
-  rescan: ["Gledam da li se nešto menjalo", "Ako je Claude radio za to vreme, zabeležiću šta je novo."],
-  plan: [`Upoređujem ${T.withYour}`, "Tražim šta fali — ništa još ne diram."],
-  restore: ["Vraćam fajlove", "Samo dodajem ono što fali. Postojeće ne prepisujem."],
-};
+function phaseText(phase: string): [string, string] | null {
+  switch (phase) {
+    case "copy":
+      return [L("Kopiram i proveravam", "Copying and checking"), L("Svaki fajl se čita, kopira i odmah proverava SHA-256 zbirom.", "Every file is read, copied and immediately checked with SHA-256.")];
+    case "read":
+      return [L("Čitam razgovore", "Reading conversations"), L("Pripremam čitljivu verziju — originali ostaju netaknuti.", "Preparing the readable version — the originals stay untouched.")];
+    case "render":
+      return [L("Pravim čitljivu verziju", "Making the readable version"), L("HTML pregled i Markdown, da razgovore možeš da čitaš bez Claude-a.", "An HTML overview and Markdown, so you can read conversations without Claude.")];
+    case "verify":
+      return [L("Proveravam backup", "Verifying the backup"), L("Ponovo čitam svaki fajl iz gotovog backupa i upoređujem SHA-256.", "Reading every file back from the finished backup and comparing SHA-256.")];
+    case "rescan":
+      return [L("Gledam da li se nešto menjalo", "Checking whether anything changed"), L("Ako je Claude radio za to vreme, zabeležiću šta je novo.", "If Claude was working meanwhile, I'll note what's new.")];
+    case "plan":
+      return [`${L("Upoređujem", "Comparing")} ${T.withYour}`, L("Tražim šta fali — ništa još ne diram.", "Looking for what's missing — nothing is touched yet.")];
+    case "restore":
+      return [L("Vraćam fajlove", "Restoring files"), L("Samo dodajem ono što fali. Postojeće ne prepisujem.", "Only adding what's missing. Nothing existing gets overwritten.")];
+  }
+  return null;
+}
 
 export function JobOverlay() {
   const job = useJob();
@@ -23,7 +34,7 @@ export function JobOverlay() {
     return () => clearInterval(t);
   }, []);
   const p = job.progress;
-  const [phaseTitle, phaseSub] = p ? (PHASE[p.phase] ?? [job.title, ""]) : [job.title, job.sub ?? "Pripremam…"];
+  const [phaseTitle, phaseSub] = p ? (phaseText(p.phase) ?? [job.title, ""]) : [job.title, job.sub ?? L("Pripremam…", "Getting ready…")];
   const pct = p ? Math.max(0, Math.min(1, p.frac)) : 0;
   const secs = Math.round((Date.now() - t0) / 1000);
 
@@ -69,11 +80,13 @@ export function JobOverlay() {
         <div className="flex items-center justify-between gap-4 bg-card-2 px-7 py-3.5">
           <div className="flex items-center gap-2 text-[12.5px] text-muted">
             <ShieldCheck size={15} className="text-ok" />
-            {job.name === "restore" ? "Samo dodajem fajlove koji fale — postojeće ne diram." : "Claude fajlove samo čitam — ništa ne brišem i ne menjam."}
+            {job.name === "restore"
+              ? L("Samo dodajem fajlove koji fale — postojeće ne diram.", "Only adding missing files — existing ones stay untouched.")
+              : L("Claude fajlove samo čitam — ništa ne brišem i ne menjam.", "Claude's files are only read — nothing is deleted or changed.")}
           </div>
           {job.cancellable && (
             <button className="btn btn-quiet" onClick={job.cancel} disabled={job.cancelling}>
-              <X size={15} /> {job.cancelling ? "Prekidam…" : "Prekini"}
+              <X size={15} /> {job.cancelling ? L("Prekidam…", "Cancelling…") : L("Prekini", "Cancel")}
             </button>
           )}
         </div>

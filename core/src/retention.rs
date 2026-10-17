@@ -3,6 +3,8 @@
 
 use crate::env::Env;
 use crate::scan::load_json;
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use regex::Regex;
 use serde::Serialize;
@@ -31,14 +33,14 @@ pub fn read_settings(env: &Env) -> Result<(Map<String, Value>, String), String> 
     if !p.exists() {
         return Ok((Map::new(), String::new()));
     }
-    let raw = fs::read_to_string(&p).map_err(|e| format!("ne mogu da pročitam {} ({})", env.tilde(&p), os_err(&e)))?;
+    let raw = fs::read_to_string(&p).map_err(|e| tf!("ne mogu da pročitam {} ({})", "can't read {} ({})", env.tilde(&p), os_err(&e)))?;
     if raw.trim().is_empty() {
         return Ok((Map::new(), raw));
     }
     match serde_json::from_str::<Value>(&raw) {
         Ok(Value::Object(o)) => Ok((o, raw)),
-        Ok(_) => Err(format!("{} nema očekivani oblik — ne diram ga", env.tilde(&p))),
-        Err(e) => Err(format!("{} nije ispravan JSON ({}) — ne diram ga", env.tilde(&p), e)),
+        Ok(_) => Err(tf!("{} nema očekivani oblik — ne diram ga", "{} doesn't have the expected shape — leaving it alone", env.tilde(&p))),
+        Err(e) => Err(tf!("{} nije ispravan JSON ({}) — ne diram ga", "{} isn't valid JSON ({}) — leaving it alone", env.tilde(&p), e)),
     }
 }
 
@@ -109,7 +111,7 @@ pub struct SetResult {
 pub fn set_retention(env: &Env, days: i64) -> SetResult {
     let fail = |m: String| SetResult { ok: false, message: m, backup: String::new(), changes: vec![] };
     if days < 1 {
-        return fail("broj dana mora biti 1 ili više".into());
+        return fail(t("broj dana mora biti 1 ili više", "the number of days must be 1 or more").into());
     }
     let (d, raw) = match read_settings(env) {
         Ok(x) => x,
@@ -122,7 +124,7 @@ pub fn set_retention(env: &Env, days: i64) -> SetResult {
     data.insert("cleanupPeriodDays".into(), Value::from(days));
     let mut changes = vec![format!(
         "\"cleanupPeriodDays\": {} → {}",
-        old.map(|o| o.to_string()).unwrap_or_else(|| "(nije podešeno = 30)".into()),
+        old.map(|o| o.to_string()).unwrap_or_else(|| t("(nije podešeno = 30)", "(not set = 30)").into()),
         days
     )];
     if let Some(desk) = d.get("desktopSessionCleanupPeriodDays").and_then(|v| v.as_i64()) {
@@ -133,7 +135,7 @@ pub fn set_retention(env: &Env, days: i64) -> SetResult {
         }
     }
     if old == Some(days) && changes.len() == 1 {
-        return SetResult { ok: true, message: "već je tako podešeno — ništa nije menjano".into(), backup: String::new(), changes: vec![] };
+        return SetResult { ok: true, message: t("već je tako podešeno — ništa nije menjano", "already set to that — nothing changed").into(), backup: String::new(), changes: vec![] };
     }
     let mut backup = String::new();
     let r = (|| -> std::io::Result<Value> {
@@ -165,14 +167,14 @@ pub fn set_retention(env: &Env, days: i64) -> SetResult {
         Ok(check)
     })();
     match r {
-        Ok(check) if check == Value::Object(data.clone()) => SetResult { ok: true, message: "sačuvano i provereno".into(), backup, changes },
+        Ok(check) if check == Value::Object(data.clone()) => SetResult { ok: true, message: t("sačuvano i provereno", "saved and verified").into(), backup, changes },
         Ok(_) => {
             if !backup.is_empty() {
                 let _ = fs::copy(env.from_token(&backup), &p);
             }
-            SetResult { ok: false, message: "provera posle upisa nije prošla — vraćen je stari fajl".into(), backup, changes: vec![] }
+            SetResult { ok: false, message: t("provera posle upisa nije prošla — vraćen je stari fajl", "the check after writing failed — the old file was put back").into(), backup, changes: vec![] }
         }
-        Err(e) => SetResult { ok: false, message: format!("izmena nije uspela ({}); tvoj fajl nije diran", os_err(&e)), backup, changes: vec![] },
+        Err(e) => SetResult { ok: false, message: tf!("izmena nije uspela ({}); tvoj fajl nije diran", "the change failed ({}); your file wasn't touched", os_err(&e)), backup, changes: vec![] },
     }
 }
 

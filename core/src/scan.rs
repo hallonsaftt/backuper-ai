@@ -1,6 +1,8 @@
 //! Skeniranje: šta Claude ima na disku. Samo ČITA metapodatke — ništa ne menja.
 
 use crate::env::{is_within, real, Env};
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use regex::Regex;
 use serde::Serialize;
@@ -11,7 +13,6 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 pub const USER_FILES_AUTO_LIMIT: u64 = 500 * 1024 * 1024;
-pub const PROJECT_BACKUP_DIR: &str = "claude-istorija";
 pub const PER_SESSION_DIRS: [&str; 4] = ["file-history", "tasks", "todos", "session-env"];
 pub const EXT_DIRS: [&str; 8] = ["skills", "agents", "commands", "plugins", "output-styles", "hooks", "rules", "workflows"];
 pub const DESKTOP_CONFIG_ITEMS: [&str; 5] = [
@@ -26,49 +27,78 @@ pub const PROJECT_SCOPED: [&str; 3] = ["code_sessions", "tmp_sessions", "project
 
 pub fn skip_claude_top(name: &str) -> Option<&'static str> {
     Some(match name {
-        "debug" => "debug logovi",
-        "statsig" | "telemetry" => "analitika programa",
-        "shell-snapshots" => "privremeni snimci terminala",
-        "local" => "instalacija samog Claude Code programa",
-        "ide" => "privremene veze sa editorom",
-        "downloads" => "preuzimanja ažuriranja programa",
-        "sessions" => "oznake trenutno upaljenih sesija",
-        "cache" => "keš",
-        ".credentials.json" => "login token — iz bezbednosnih razloga; posle vraćanja se samo ponovo uloguješ",
+        "debug" => t("debug logovi", "debug logs"),
+        "statsig" | "telemetry" => t("analitika programa", "program analytics"),
+        "shell-snapshots" => t("privremeni snimci terminala", "temporary terminal snapshots"),
+        "local" => t("instalacija samog Claude Code programa", "the Claude Code program installation itself"),
+        "ide" => t("privremene veze sa editorom", "temporary editor connections"),
+        "downloads" => t("preuzimanja ažuriranja programa", "program update downloads"),
+        "sessions" => t("oznake trenutno upaljenih sesija", "markers of currently running sessions"),
+        "cache" => t("keš", "cache"),
+        ".credentials.json" => t("login token — iz bezbednosnih razloga; posle vraćanja se samo ponovo uloguješ", "login token — left out for security; after restoring you just log in again"),
         _ => return None,
     })
 }
 
 pub struct CatDef {
     pub id: &'static str,
-    pub title: &'static str,
+    pub title_sr: &'static str,
+    pub title_en: &'static str,
     pub default: bool,
-    pub desc: &'static str,
+    pub desc_sr: &'static str,
+    pub desc_en: &'static str,
+}
+
+impl CatDef {
+    pub fn title(&self) -> &'static str {
+        t(self.title_sr, self.title_en)
+    }
+    pub fn desc(&self) -> &'static str {
+        t(self.desc_sr, self.desc_en)
+    }
 }
 
 pub const CAT_DEFS: [CatDef; 9] = [
-    CatDef { id: "code_sessions", title: "Claude Code razgovori", default: true,
-        desc: "Svi razgovori iz terminala i Code taba, po projektima — sa pod-agentima, rezultatima alata i Claude-ovom memorijom projekta. Originalni .jsonl format koji Claude čita (~/.claude/projects)." },
-    CatDef { id: "tmp_sessions", title: "Slike i scratchpad iz razgovora", default: true,
-        desc: "Slike koje si nalepio u razgovore i Claude-ovi radni fajlovi (scratchpad). Stoje u privremenom folderu sistema koji se briše pri restartu ili čišćenju diska — sačuvaj ih dok postoje." },
-    CatDef { id: "global", title: "Podešavanja, kontekst i istorija", default: true,
-        desc: "Globalni CLAUDE.md, settings.json, ~/.claude.json (projekti, MCP serveri), istorija kucanih poruka (history.jsonl), planovi, zadaci i checkpoint snimci za rewind." },
-    CatDef { id: "extensions", title: "Skillovi, agenti, komande, pluginovi", default: true,
-        desc: "~/.claude/skills, agents, commands, plugins, output-styles, hooks i rules." },
-    CatDef { id: "project_files", title: "Claude fajlovi u projektima", default: true,
-        desc: "Iz foldera svakog projekta samo CLAUDE.md, CLAUDE.local.md, .mcp.json i .claude/ — bez koda." },
-    CatDef { id: "desktop_code", title: "Code tab — lista razgovora", default: true,
-        desc: "Kartice koje Claude aplikacija prikazuje u Code tabu (naslovi, arhivirano). Sami razgovori su u stavci „Claude Code razgovori”." },
-    CatDef { id: "cowork", title: "Cowork sesije", default: true,
-        desc: "Cowork razgovori i fajlovi koje je Claude napravio ili koje si ubacio u Cowork." },
-    CatDef { id: "desktop_config", title: "Podešavanja Claude aplikacije", default: true,
-        desc: "claude_desktop_config.json (MCP serveri), config.json i instalirane ekstenzije." },
-    CatDef { id: "user_files", title: "Folderi ~/Claude i ~/Documents/Claude", default: false,
-        desc: "Fajlovi koje Claude aplikacija čuva za tebe (artefakti, rezultati zakazanih zadataka). Uključeno je ako je manje od 500 MB; ako je veće, proveri da tu nemaš nešto svoje (npr. kod)." },
+    CatDef { id: "code_sessions", default: true,
+        title_sr: "Claude Code razgovori", title_en: "Claude Code conversations",
+        desc_sr: "Svi razgovori iz terminala i Code taba, po projektima — sa pod-agentima, rezultatima alata i Claude-ovom memorijom projekta. Originalni .jsonl format koji Claude čita (~/.claude/projects).",
+        desc_en: "Every conversation from the terminal and the Code tab, by project — with sub-agents, tool results and Claude's project memory. The original .jsonl format Claude reads (~/.claude/projects)." },
+    CatDef { id: "tmp_sessions", default: true,
+        title_sr: "Slike i scratchpad iz razgovora", title_en: "Images and scratchpad from conversations",
+        desc_sr: "Slike koje si nalepio u razgovore i Claude-ovi radni fajlovi (scratchpad). Stoje u privremenom folderu sistema koji se briše pri restartu ili čišćenju diska — sačuvaj ih dok postoje.",
+        desc_en: "Images you pasted into conversations and Claude's working files (scratchpad). They live in the system's temporary folder, which is cleared on restart or disk cleanup — save them while they exist." },
+    CatDef { id: "global", default: true,
+        title_sr: "Podešavanja, kontekst i istorija", title_en: "Settings, context and history",
+        desc_sr: "Globalni CLAUDE.md, settings.json, ~/.claude.json (projekti, MCP serveri), istorija kucanih poruka (history.jsonl), planovi, zadaci i checkpoint snimci za rewind.",
+        desc_en: "Global CLAUDE.md, settings.json, ~/.claude.json (projects, MCP servers), the history of your typed prompts (history.jsonl), plans, tasks and rewind checkpoints." },
+    CatDef { id: "extensions", default: true,
+        title_sr: "Skillovi, agenti, komande, pluginovi", title_en: "Skills, agents, commands, plugins",
+        desc_sr: "~/.claude/skills, agents, commands, plugins, output-styles, hooks i rules.",
+        desc_en: "~/.claude/skills, agents, commands, plugins, output-styles, hooks and rules." },
+    CatDef { id: "project_files", default: true,
+        title_sr: "Claude fajlovi u projektima", title_en: "Claude files inside projects",
+        desc_sr: "Iz foldera svakog projekta samo CLAUDE.md, CLAUDE.local.md, .mcp.json i .claude/ — bez koda.",
+        desc_en: "From each project folder only CLAUDE.md, CLAUDE.local.md, .mcp.json and .claude/ — never your code." },
+    CatDef { id: "desktop_code", default: true,
+        title_sr: "Code tab — lista razgovora", title_en: "Code tab — conversation list",
+        desc_sr: "Kartice koje Claude aplikacija prikazuje u Code tabu (naslovi, arhivirano). Sami razgovori su u stavci „Claude Code razgovori”.",
+        desc_en: "The cards the Claude app shows in the Code tab (titles, archived). The conversations themselves are under “Claude Code conversations”." },
+    CatDef { id: "cowork", default: true,
+        title_sr: "Cowork sesije", title_en: "Cowork sessions",
+        desc_sr: "Cowork razgovori i fajlovi koje je Claude napravio ili koje si ubacio u Cowork.",
+        desc_en: "Cowork conversations and the files Claude made or you added in Cowork." },
+    CatDef { id: "desktop_config", default: true,
+        title_sr: "Podešavanja Claude aplikacije", title_en: "Claude app settings",
+        desc_sr: "claude_desktop_config.json (MCP serveri), config.json i instalirane ekstenzije.",
+        desc_en: "claude_desktop_config.json (MCP servers), config.json and installed extensions." },
+    CatDef { id: "user_files", default: false,
+        title_sr: "Folderi ~/Claude i ~/Documents/Claude", title_en: "~/Claude and ~/Documents/Claude folders",
+        desc_sr: "Fajlovi koje Claude aplikacija čuva za tebe (artefakti, rezultati zakazanih zadataka). Uključeno je ako je manje od 500 MB; ako je veće, proveri da tu nemaš nešto svoje (npr. kod).",
+        desc_en: "Files the Claude app keeps for you (artifacts, scheduled task results). Included when under 500 MB; if larger, check that nothing of your own lives there (e.g. code)." },
 ];
 
 pub fn cat_title(id: &str) -> &'static str {
-    CAT_DEFS.iter().find(|c| c.id == id).map(|c| c.title).unwrap_or("Ostalo")
+    CAT_DEFS.iter().find(|c| c.id == id).map(|c| c.title()).unwrap_or(t("Ostalo", "Other"))
 }
 
 pub fn uuid_re() -> &'static Regex {
@@ -139,10 +169,10 @@ pub struct Inventory {
 
 impl Inventory {
     pub fn cat(&self, id: &str) -> &Cat {
-        self.cats.iter().find(|c| c.id == id).expect("kategorija")
+        self.cats.iter().find(|c| c.id == id).expect("category")
     }
     fn cat_mut(&mut self, id: &str) -> &mut Cat {
-        self.cats.iter_mut().find(|c| c.id == id).expect("kategorija")
+        self.cats.iter_mut().find(|c| c.id == id).expect("category")
     }
 }
 
@@ -212,7 +242,7 @@ impl<'a> Walk<'a> {
         let rd = match fs::read_dir(d) {
             Ok(r) => r,
             Err(e) => {
-                self.problems.push((self.env.token(d), format!("folder ne može da se otvori ({})", os_err(&e))));
+                self.problems.push((self.env.token(d), tf!("folder ne može da se otvori ({})", "folder can't be opened ({})", os_err(&e))));
                 return;
             }
         };
@@ -243,9 +273,9 @@ impl<'a> Walk<'a> {
                 Ok(m) => m,
                 Err(e) => {
                     let why = if is_link && e.kind() != std::io::ErrorKind::PermissionDenied {
-                        "pokvarena prečica (link vodi na nešto što više ne postoji)".to_string()
+                        t("pokvarena prečica (link vodi na nešto što više ne postoji)", "broken shortcut (the link points to something that no longer exists)").to_string()
                     } else {
-                        format!("ne može da se pročita ({})", os_err(&e))
+                        tf!("ne može da se pročita ({})", "can't be read ({})", os_err(&e))
                     };
                     self.problems.push((self.env.token(&p), why));
                     continue;
@@ -273,7 +303,7 @@ impl<'a> Walk<'a> {
                     link,
                 });
             } else {
-                self.excluded.push((self.env.token(&p), "specijalan sistemski fajl (socket/pipe) — nije podatak".into()));
+                self.excluded.push((self.env.token(&p), t("specijalan sistemski fajl (socket/pipe) — nije podatak", "special system file (socket/pipe) — not data").into()));
             }
         }
     }
@@ -335,7 +365,7 @@ pub fn detect_running() -> Vec<String> {
         return found;
     }
     let me = std::process::id().to_string();
-    for (name, label) in [("Claude", "Claude aplikacija"), ("claude", "Claude Code u terminalu")] {
+    for (name, label) in [("Claude", t("Claude aplikacija", "Claude app")), ("claude", t("Claude Code u terminalu", "Claude Code in a terminal"))] {
         if let Ok(o) = command("pgrep").args(["-x", name]).output() {
             let s = String::from_utf8_lossy(&o.stdout);
             if s.split_whitespace().any(|p| p.chars().all(|c| c.is_ascii_digit()) && p != me) {
@@ -356,7 +386,7 @@ pub fn scan(env: &Env) -> Inventory {
     let mut excluded = vec![];
     let mut cats: Vec<Cat> = CAT_DEFS
         .iter()
-        .map(|d| Cat { id: d.id.into(), title: d.title.into(), default: d.default, desc: d.desc.into(), files: vec![] })
+        .map(|d| Cat { id: d.id.into(), title: d.title().into(), default: d.default, desc: d.desc().into(), files: vec![] })
         .collect();
     let c = env.claude.clone();
     let set = |cats: &mut Vec<Cat>, id: &str, files: Vec<FEntry>| {
@@ -400,8 +430,8 @@ pub fn scan(env: &Env) -> Inventory {
                 .map(|rd| rd.filter_map(|e| e.ok()).any(|e| !known.contains(e.file_name().to_string_lossy().as_ref())))
                 .unwrap_or(false);
             if others {
-                w.excluded.push((format!("{}/(ostalo)", env.token(&env.app)),
-                                 "program, keš, logovi i virtuelna mašina aplikacije — nisu tvoji podaci".into()));
+                w.excluded.push((format!("{}/{}", env.token(&env.app), t("(ostalo)", "(other)")),
+                                 t("program, keš, logovi i virtuelna mašina aplikacije — nisu tvoji podaci", "the app's program files, cache, logs and virtual machine — not your data").into()));
             }
         }
         let mut uf = vec![];
@@ -462,7 +492,7 @@ pub fn scan(env: &Env) -> Inventory {
                 Ok(_) => continue,
                 Err(e) => {
                     if e.kind() != std::io::ErrorKind::NotFound {
-                        w.problems.push((env.token(&root), format!("folder projekta ne može da se otvori ({})", os_err(&e))));
+                        w.problems.push((env.token(&root), tf!("folder projekta ne može da se otvori ({})", "project folder can't be opened ({})", os_err(&e))));
                     }
                     continue;
                 }
@@ -583,7 +613,7 @@ pub fn cat_note(inv: &Inventory, cid: &str, projects: Option<&HashSet<String>>) 
         })
         .collect();
     if files.is_empty() {
-        return "nije pronađeno".into();
+        return t("nije pronađeno", "not found").into();
     }
     let size = human(files.iter().map(|f| f.size).sum());
     if cid == "code_sessions" {
@@ -592,13 +622,14 @@ pub fn cat_note(inv: &Inventory, cid: &str, projects: Option<&HashSet<String>>) 
     }
     if cid == "extensions" {
         let mut parts = vec![];
-        for (d, one, few, many) in [("skills", "skill", "skilla", "skillova"), ("agents", "agent", "agenta", "agenata"),
-                                    ("commands", "komanda", "komande", "komandi")] {
+        for (d, srw, enw) in [("skills", ("skill", "skilla", "skillova"), ("skill", "skills")),
+                              ("agents", ("agent", "agenta", "agenata"), ("agent", "agents")),
+                              ("commands", ("komanda", "komande", "komandi"), ("command", "commands"))] {
             let k = fs::read_dir(inv.env.claude.join(d))
                 .map(|rd| rd.filter_map(|e| e.ok()).filter(|e| !e.file_name().to_string_lossy().starts_with('.')).count())
                 .unwrap_or(0) as u64;
             if k > 0 {
-                parts.push(plural(k, one, few, many));
+                parts.push(pl(k, srw, enw));
             }
         }
         if !parts.is_empty() {
@@ -694,7 +725,18 @@ pub fn project_prompt_history(env: &Env, cwd: &str) -> Vec<u8> {
     out.into_bytes()
 }
 
-/// Pravi <projekat>/claude-istorija/ sa .gitignore, da istorija (može da sadrži ključeve) ne ode u git.
+/// Where a project's history goes: an existing claude-history / claude-istorija folder, or a new one named in the current language.
+pub fn project_dest(cwd: &Path) -> PathBuf {
+    for n in crate::i18n::PROJECT_DIRS {
+        let p = cwd.join(n);
+        if p.is_dir() {
+            return p;
+        }
+    }
+    cwd.join(crate::i18n::names().project_dir)
+}
+
+/// Makes <project>/claude-history/ with a .gitignore, so the history (it may hold keys) never ends up in git.
 pub fn prepare_project_dest(dest: &Path) -> Result<(), String> {
     match fs::create_dir(dest) {
         Ok(_) => {}
@@ -705,7 +747,8 @@ pub fn prepare_project_dest(dest: &Path) -> Result<(), String> {
     if fs::symlink_metadata(&gi).is_err() {
         use std::io::Write;
         let mut f = fs::OpenOptions::new().write(true).create_new(true).open(&gi).map_err(|e| os_err(&e))?;
-        f.write_all("# Claude istorija — namerno van git-a (može da sadrži lozinke i API ključeve)\n*\n".as_bytes())
+        f.write_all(t("# Claude istorija — namerno van git-a (može da sadrži lozinke i API ključeve)\n*\n",
+                      "# Claude history — kept out of git on purpose (it may contain passwords and API keys)\n*\n").as_bytes())
             .map_err(|e| os_err(&e))?;
     }
     Ok(())

@@ -1,4 +1,4 @@
-//! Sitne pomoćne funkcije: formatiranje brojeva, srpska množina, slug, SHA-256, vreme.
+//! Small helpers: number/size/date formatting (English or Serbian), plurals, slug, SHA-256, time.
 
 use chrono::{DateTime, Local, TimeZone};
 use serde::Serialize;
@@ -9,6 +9,7 @@ use std::io::{self, Read};
 use std::path::Path;
 use std::time::Instant;
 
+/// 1.2 MB (English) / 1,2 MB (srpski)
 pub fn human(n: u64) -> String {
     let mut v = n as f64;
     for unit in ["B", "KB", "MB", "GB", "TB"] {
@@ -16,7 +17,8 @@ pub fn human(n: u64) -> String {
             return if unit == "B" {
                 format!("{} B", n)
             } else {
-                format!("{:.1} {}", v, unit).replace('.', ",")
+                let s = format!("{:.1} {}", v, unit);
+                if crate::i18n::sr() { s.replace('.', ",") } else { s }
             };
         }
         v /= 1024.0;
@@ -24,12 +26,14 @@ pub fn human(n: u64) -> String {
     String::new()
 }
 
+/// 12,345 (English) / 12.345 (srpski)
 pub fn num(n: u64) -> String {
+    let sep = if crate::i18n::sr() { '.' } else { ',' };
     let s = n.to_string();
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     for (i, c) in s.chars().enumerate() {
         if i > 0 && (s.len() - i) % 3 == 0 {
-            out.push('.');
+            out.push(sep);
         }
         out.push(c);
     }
@@ -37,10 +41,6 @@ pub fn num(n: u64) -> String {
 }
 
 /// Srpska množina: 1 fajl, 2 fajla, 5 fajlova (11–14 → "many").
-pub fn plural(n: u64, one: &str, few: &str, many: &str) -> String {
-    format!("{} {}", num(n), plural_word(n, one, few, many))
-}
-
 pub fn plural_word<'a>(n: u64, one: &'a str, few: &'a str, many: &'a str) -> &'a str {
     let (a, b) = (n % 10, n % 100);
     if a == 1 && b != 11 {
@@ -52,14 +52,26 @@ pub fn plural_word<'a>(n: u64, one: &'a str, few: &'a str, many: &'a str) -> &'a
     }
 }
 
+/// Number + word in the current language: pl(5, ("fajl", "fajla", "fajlova"), ("file", "files")).
+pub fn pl(n: u64, sr: (&str, &str, &str), en: (&str, &str)) -> String {
+    if crate::i18n::sr() {
+        format!("{} {}", num(n), plural_word(n, sr.0, sr.1, sr.2))
+    } else {
+        format!("{} {}", num(n), if n == 1 { en.0 } else { en.1 })
+    }
+}
+
 pub fn n_files(n: u64) -> String {
-    plural(n, "fajl", "fajla", "fajlova")
+    pl(n, ("fajl", "fajla", "fajlova"), ("file", "files"))
 }
 pub fn n_convs(n: u64) -> String {
-    plural(n, "razgovor", "razgovora", "razgovora")
+    pl(n, ("razgovor", "razgovora", "razgovora"), ("conversation", "conversations"))
 }
 pub fn n_projs(n: u64) -> String {
-    plural(n, "projekat", "projekta", "projekata")
+    pl(n, ("projekat", "projekta", "projekata"), ("project", "projects"))
+}
+pub fn n_warnings(n: u64) -> String {
+    pl(n, ("upozorenje", "upozorenja", "upozorenja"), ("warning", "warnings"))
 }
 
 pub fn slug(s: &str, maxlen: usize) -> String {
@@ -79,7 +91,7 @@ pub fn slug(s: &str, maxlen: usize) -> String {
     let t: String = out.trim_matches('-').chars().take(maxlen).collect();
     let t = t.trim_matches('-').to_string();
     if t.is_empty() {
-        "bez-naslova".into()
+        crate::i18n::t("bez-naslova", "untitled").into()
     } else {
         t
     }
@@ -123,9 +135,18 @@ pub fn parse_ts(ts: &str) -> Option<DateTime<Local>> {
         .map(|d| d.with_timezone(&Local))
 }
 
+fn date_fmt(with_time: bool) -> &'static str {
+    match (crate::i18n::sr(), with_time) {
+        (true, true) => "%d.%m.%Y. %H:%M",
+        (true, false) => "%d.%m.%Y.",
+        (false, true) => "%b %-d, %Y %H:%M",
+        (false, false) => "%b %-d, %Y",
+    }
+}
+
 pub fn fmt_ts(ts: &str, with_time: bool) -> String {
     match parse_ts(ts) {
-        Some(d) => d.format(if with_time { "%d.%m.%Y. %H:%M" } else { "%d.%m.%Y." }).to_string(),
+        Some(d) => d.format(date_fmt(with_time)).to_string(),
         None => ts.chars().take(16).collect::<String>().replace('T', " "),
     }
 }
@@ -135,7 +156,7 @@ pub fn fmt_epoch(secs: f64, with_time: bool) -> String {
         return String::new();
     }
     match Local.timestamp_opt(secs as i64, 0).single() {
-        Some(d) => d.format(if with_time { "%d.%m.%Y. %H:%M" } else { "%d.%m.%Y." }).to_string(),
+        Some(d) => d.format(date_fmt(with_time)).to_string(),
         None => String::new(),
     }
 }
@@ -154,10 +175,12 @@ pub fn os_err(e: &io::Error) -> String {
         None => e.to_string(),
     };
     if cfg!(target_os = "macos") && e.kind() == io::ErrorKind::PermissionDenied {
-        msg.push_str(
+        msg.push_str(crate::i18n::t(
             " — macOS ne dozvoljava pristup; dozvoli u System Settings → Privacy & Security → \
              Full Disk Access za Claude Backup",
-        );
+            " — macOS blocked access; allow it in System Settings → Privacy & Security → \
+             Full Disk Access for Claude Backup",
+        ));
     }
     msg
 }
@@ -311,5 +334,28 @@ impl<'a> Reporter<'a> {
             line1: line1.into(),
             line2: line2.into(),
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn formats_per_language() {
+        let _g = crate::i18n::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        crate::i18n::set_lang("sr");
+        assert_eq!(num(1284), "1.284");
+        assert_eq!(human(537_100_000), "512,2 MB");
+        assert_eq!(n_files(1), "1 fajl");
+        assert_eq!(n_files(3), "3 fajla");
+        assert_eq!(n_files(12), "12 fajlova");
+        assert_eq!(n_files(21), "21 fajl");
+        crate::i18n::set_lang("en");
+        assert_eq!(num(1284), "1,284");
+        assert_eq!(human(537_100_000), "512.2 MB");
+        assert_eq!(n_files(1), "1 file");
+        assert_eq!(n_files(21), "21 files");
+        assert_eq!(n_convs(0), "0 conversations");
     }
 }

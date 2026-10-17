@@ -1,5 +1,7 @@
 //! Čitanje backupa (ZIP ili folder) i provera svakog fajla po SHA-256 iz MANIFEST-a.
 
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use serde::Serialize;
 use serde_json::Value;
@@ -45,12 +47,12 @@ impl Reader {
         let md = fs::metadata(path).map_err(|e| os_err(&e))?;
         if md.is_dir() {
             if !path.join("MANIFEST.json").is_file() {
-                return Err("u ovom folderu nema MANIFEST.json — nije Claude backup".into());
+                return Err(t("u ovom folderu nema MANIFEST.json — nije Claude backup", "this folder has no MANIFEST.json — not a Claude backup").into());
             }
             return Ok(Reader::Dir { root: path.to_path_buf() });
         }
         let f = File::open(path).map_err(|e| os_err(&e))?;
-        let zip = zip::ZipArchive::new(f).map_err(|e| format!("nije ispravan ZIP ({e})"))?;
+        let zip = zip::ZipArchive::new(f).map_err(|e| tf!("nije ispravan ZIP ({})", "not a valid ZIP ({})", e))?;
         let names: HashSet<String> = zip.file_names().map(|s| s.to_string()).collect();
         let mut mans: Vec<&String> = names.iter().filter(|n| n.ends_with("/MANIFEST.json") && n.matches('/').count() == 1).collect();
         mans.sort();
@@ -59,7 +61,7 @@ impl Reader {
         } else if names.contains("MANIFEST.json") {
             String::new()
         } else {
-            return Err("u ZIP-u nema MANIFEST.json — nije Claude backup".into());
+            return Err(t("u ZIP-u nema MANIFEST.json — nije Claude backup", "the ZIP has no MANIFEST.json — not a Claude backup").into());
         };
         Ok(Reader::Zip { zip, prefix, names })
     }
@@ -68,9 +70,9 @@ impl Reader {
         let mut buf = vec![];
         self.with(&"MANIFEST.json".to_string(), &mut |r| r.read_to_end(&mut buf).map(|_| ()))
             .map_err(|e| e.to_string())?;
-        let v: Value = serde_json::from_slice(&buf).map_err(|e| format!("MANIFEST.json nije ispravan ({e})"))?;
+        let v: Value = serde_json::from_slice(&buf).map_err(|e| tf!("MANIFEST.json nije ispravan ({})", "MANIFEST.json is invalid ({})", e))?;
         if v.get("format").and_then(|f| f.as_str()) != Some("claude-backup") {
-            return Err("MANIFEST.json nije prepoznat".into());
+            return Err(t("MANIFEST.json nije prepoznat", "MANIFEST.json not recognised").into());
         }
         Ok(v)
     }
@@ -126,7 +128,7 @@ pub fn verify_backup(path: &Path, cb: Cb) -> VerifyResult {
     let n = entries.len();
     for (i, e) in entries.iter().enumerate() {
         let arc = e["arc"].as_str().unwrap_or("").to_string();
-        rep.emit("verify", done as f64 / total as f64, format!("{} / {} fajlova", num(i as u64 + 1), num(n as u64)), arc.clone(), i + 1 == n);
+        rep.emit("verify", done as f64 / total as f64, tf!("{} / {} fajlova", "{} / {} files", num(i as u64 + 1), num(n as u64)), arc.clone(), i + 1 == n);
         if !safe_arc(&arc) {
             vr.bad.push(arc);
             continue;

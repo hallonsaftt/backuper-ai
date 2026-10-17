@@ -6,6 +6,8 @@ use backup_core::restore::{apply_restore, plan_restore, summarize, CatPlan, RIte
 use backup_core::retention::{retention_info, set_retention as core_set_retention, RetentionInfo, SetResult};
 use backup_core::scan::*;
 use backup_core::schedule::*;
+use backup_core::i18n::t;
+use backup_core::tf;
 use backup_core::util::*;
 use backup_core::verify::{verify_backup, Reader, VerifyResult};
 use serde::Serialize;
@@ -247,7 +249,9 @@ fn find_backups(env: &Env, inv: Option<&Inventory>) -> Vec<BackupFileDto> {
     if let Some(inv) = inv {
         for p in inv.projects.values() {
             if !p.cwd.is_empty() && p.sessions > 0 {
-                locs.push(Path::new(&p.cwd).join(PROJECT_BACKUP_DIR));
+                for n in backup_core::i18n::PROJECT_DIRS {
+                    locs.push(Path::new(&p.cwd).join(n));
+                }
             }
         }
     }
@@ -274,12 +278,13 @@ fn find_backups(env: &Env, inv: Option<&Inventory>) -> Vec<BackupFileDto> {
             }
             let size = if is_zip { std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0) } else { 0 };
             let mt = mtime_secs(&p);
-            let kind = if loc.ends_with(PROJECT_BACKUP_DIR) {
-                "projekat"
+            // vrsta kao kod; interfejs je prevodi
+            let kind = if backup_core::i18n::PROJECT_DIRS.iter().any(|n| loc.ends_with(n)) {
+                "project"
             } else if !st.dest.is_empty() && loc == Path::new(&st.dest) {
-                "automatski"
+                "auto"
             } else {
-                "ručni"
+                "manual"
             };
             out.push(BackupFileDto {
                 path: p.to_string_lossy().into(),
@@ -318,7 +323,7 @@ where
     F: FnOnce(&(dyn Fn(Progress) + Sync)) -> Result<Value, String> + Send + 'static,
 {
     if busy.swap(true, Ordering::SeqCst) {
-        return Err("Već radim drugi posao — sačekaj da se završi.".into());
+        return Err(t("Već radim drugi posao — sačekaj da se završi.", "Already busy with another job — wait for it to finish.").into());
     }
     let job = job.to_string();
     std::thread::spawn(move || {
@@ -331,7 +336,7 @@ where
         let done = match r {
             Ok(Ok(data)) => JobDone { job: job.clone(), ok: true, data, error: String::new() },
             Ok(Err(e)) => JobDone { job: job.clone(), ok: false, data: Value::Null, error: e },
-            Err(_) => JobDone { job: job.clone(), ok: false, data: Value::Null, error: "neočekivana greška u programu".into() },
+            Err(_) => JobDone { job: job.clone(), ok: false, data: Value::Null, error: t("neočekivana greška u programu", "unexpected error in the program").into() },
         };
         busy.store(false, Ordering::SeqCst);
         let _ = app.emit("job-done", done);
@@ -449,7 +454,7 @@ fn start_backup(app: AppHandle, state: State<'_, AppState>, req: BackupReq) -> R
         o.md = req.md;
         o.as_zip = req.zip;
         let r: BackupResult = run_backup(&inv, &o, cb, Some(cancel.as_ref())).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::Interrupted { "Prekinuto — nedovršeni backup je uklonjen. U Claude-u ništa nije promenjeno.".into() } else { os_err(&e) }
+            if e.kind() == std::io::ErrorKind::Interrupted { t("Prekinuto — nedovršeni backup je uklonjen. U Claude-u ništa nije promenjeno.", "Cancelled — the unfinished backup was removed. Nothing in Claude was changed.").into() } else { os_err(&e) }
         })?;
         Ok(json!({"result": r, "lines": backup_core::backup::report_lines(&r)}))
     })
@@ -481,14 +486,14 @@ fn project_for_folder(state: State<'_, AppState>, path: String) -> Option<String
 fn project_preview(state: State<'_, AppState>, key: String) -> Result<ProjectPreview, String> {
     let inv = current_inv(&state);
     let env = inv.env.clone();
-    let p = inv.projects.get(&key).ok_or("nepoznat projekat")?;
+    let p = inv.projects.get(&key).ok_or(t("nepoznat projekat", "unknown project"))?;
     let e = project_entries(&inv, &key);
     let cnt = |cat: &str| e.iter().filter(|f| f.cat == cat).count() as u64;
     Ok(ProjectPreview {
         key: key.clone(),
         name: Path::new(&p.cwd).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
         cwd_tilde: env.tilde(Path::new(&p.cwd)),
-        dest_tilde: env.tilde(&Path::new(&p.cwd).join(PROJECT_BACKUP_DIR)),
+        dest_tilde: env.tilde(&project_dest(Path::new(&p.cwd))),
         sessions: p.sessions,
         sessions_size: e.iter().filter(|f| f.cat == "code_sessions").map(|f| f.size).sum(),
         memory: e.iter().filter(|f| f.cat == "code_sessions" && f.arc.contains("/memory/")).count() as u64,
@@ -503,9 +508,9 @@ fn project_preview(state: State<'_, AppState>, key: String) -> Result<ProjectPre
 #[tauri::command]
 fn start_project_backup(app: AppHandle, state: State<'_, AppState>, key: String, html: bool, md: bool, zip: bool) -> Result<(), String> {
     let inv = current_inv(&state);
-    let p = inv.projects.get(&key).cloned().ok_or("nepoznat projekat")?;
-    let dest = Path::new(&p.cwd).join(PROJECT_BACKUP_DIR);
-    prepare_project_dest(&dest).map_err(|e| format!("Ne mogu da pišem u folder projekta: {e}"))?;
+    let p = inv.projects.get(&key).cloned().ok_or(t("nepoznat projekat", "unknown project"))?;
+    let dest = project_dest(Path::new(&p.cwd));
+    prepare_project_dest(&dest).map_err(|e| tf!("Ne mogu da pišem u folder projekta: {}", "Can't write to the project folder: {}", e))?;
     let cancel = state.cancel.clone();
     cancel.store(false, Ordering::SeqCst);
     spawn_job(app, state.busy.clone(), "backup", move |cb| {
@@ -522,7 +527,7 @@ fn start_project_backup(app: AppHandle, state: State<'_, AppState>, key: String,
             prefix: format!("ClaudeBackup_{}", slug(&name, 30)),
             project_key: Some(p.key.clone()),
             scope: json!({"type": "project", "cwd": p.cwd, "key": p.key}),
-            extra: if prompts.is_empty() { vec![] } else { vec![("kucane-poruke.jsonl".into(), prompts)] },
+            extra: if prompts.is_empty() { vec![] } else { vec![(backup_core::i18n::names().prompts.into(), prompts)] },
         };
         let r = run_backup(&inv, &o, cb, Some(cancel.as_ref())).map_err(|e| os_err(&e))?;
         Ok(json!({"result": r, "lines": backup_core::backup::report_lines(&r)}))
@@ -568,7 +573,7 @@ fn start_restore_plan(app: AppHandle, state: State<'_, AppState>, path: String) 
 
 #[tauri::command]
 fn start_restore(app: AppHandle, state: State<'_, AppState>, cats: Vec<String>, set_ret: bool) -> Result<(), String> {
-    let plan = state.plan.lock().unwrap().take().ok_or("Prvo izaberi backup.")?;
+    let plan = state.plan.lock().unwrap().take().ok_or(t("Prvo izaberi backup.", "Choose a backup first."))?;
     spawn_job(app, state.busy.clone(), "restore", move |cb| {
         let env = Env::new();
         let (path, mut items) = plan;
@@ -647,11 +652,26 @@ fn open_fda_settings() {
 }
 
 #[tauri::command]
+fn get_lang() -> String {
+    backup_core::i18n::lang().into()
+}
+
+/// Menja jezik i pamti ga (važi i za zakazani backup i komandnu liniju).
+#[tauri::command]
+fn set_lang(state: State<'_, AppState>, lang: String) -> Result<String, String> {
+    backup_core::i18n::save_lang(&Env::new(), &lang).map_err(|e| os_err(&e))?;
+    // nazivi kategorija dolaze iz skeniranja — sledeći pregled ih pravi na novom jeziku
+    *state.inv.lock().unwrap() = None;
+    Ok(backup_core::i18n::lang().into())
+}
+
+#[tauri::command]
 fn app_version() -> String {
-    format!("{} · jezgro {}", env!("CARGO_PKG_VERSION"), backup_core::TOOL_VERSION)
+    format!("{} · {} {}", env!("CARGO_PKG_VERSION"), t("jezgro", "core"), backup_core::TOOL_VERSION)
 }
 
 pub fn run() {
+    backup_core::i18n::init(&Env::new());
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
@@ -677,8 +697,10 @@ pub fn run() {
             reveal,
             open_path,
             open_fda_settings,
+            get_lang,
+            set_lang,
             app_version
         ])
         .run(tauri::generate_context!())
-        .expect("greška pri pokretanju aplikacije");
+        .expect("failed to start the app");
 }

@@ -4,6 +4,7 @@ import { openPath, reveal } from "../api";
 import { human, nFiles, num } from "../lib/format";
 import type { BackupDone } from "../types";
 import { Lines, Seal, rise } from "./ui";
+import { L } from "../lib/i18n";
 import { SEP, T } from "../lib/platform";
 
 export function BackupResultView({ done, title, onBack, extra }: { done: BackupDone; title: string; onBack: () => void; extra?: ReactNode }) {
@@ -15,32 +16,32 @@ export function BackupResultView({ done, title, onBack, extra }: { done: BackupD
       <div className="card rise overflow-hidden" style={rise(0)}>
         <div className="relative grid grid-cols-[1fr_auto] gap-8 px-9 pt-9 pb-7">
           <div>
-            <div className="eyebrow mb-3">{passed ? "Gotovo · provereno" : "Gotovo · sa greškama"}</div>
+            <div className="eyebrow mb-3">{passed ? L("Gotovo · provereno", "Done · verified") : L("Gotovo · sa greškama", "Done · with errors")}</div>
             <h1 className="display text-[36px] leading-[1.08] font-[440]">
               {passed ? (
                 <>
-                  {title} <em className="display-wonk text-ok">je na sigurnom.</em>
+                  {title} <em className="display-wonk text-ok">{L("je na sigurnom.", "is safe.")}</em>
                 </>
               ) : (
-                <>Backup je napravljen, ali provera nije prošla.</>
+                <>{L("Backup je napravljen, ali provera nije prošla.", "The backup was made, but verification failed.")}</>
               )}
             </h1>
             <p className="mt-3 max-w-[480px] text-[14px] text-muted">
               {passed
-                ? `${nFiles(r.files)} (${human(r.bytes)}) — svaki pročitan ponovo iz gotovog backupa i identičan originalu.`
-                : "Ne oslanjaj se na ovaj backup. Pokušaj ponovo, a ako se ponavlja, pogledaj izvestaj.txt u backupu."}
+                ? `${nFiles(r.files)} (${human(r.bytes)}) — ${L("svaki pročitan ponovo iz gotovog backupa i identičan originalu.", "each one read back from the finished backup and identical to the original.")}`
+                : L("Ne oslanjaj se na ovaj backup. Pokušaj ponovo, a ako se ponavlja, pogledaj izveštaj u backupu.", "Don't rely on this backup. Try again; if it keeps happening, look at the report inside the backup.")}
             </p>
             <div className="mt-6 flex flex-wrap gap-2.5">
               <button className="btn btn-ink" onClick={() => reveal(r.path)}>
-                <FolderSearch size={16} /> Prikaži u {T.inFm}
+                <FolderSearch size={16} /> {L("Prikaži u", "Show in")} {T.inFm}
               </button>
               {!r.is_zip && r.has_html && (
-                <button className="btn btn-ghost" onClick={() => openPath(`${r.path}${SEP}Pregled.html`)}>
-                  <BookOpenText size={16} /> Otvori Pregled.html
+                <button className="btn btn-ghost" onClick={() => openPath(`${r.path}${SEP}${r.overview || "Pregled.html"}`)}>
+                  <BookOpenText size={16} /> {L("Otvori", "Open")} {r.overview || "Pregled.html"}
                 </button>
               )}
               <button className="btn btn-quiet" onClick={onBack}>
-                <ArrowLeft size={15} /> Nazad
+                <ArrowLeft size={15} /> {L("Nazad", "Back")}
               </button>
             </div>
           </div>
@@ -50,9 +51,9 @@ export function BackupResultView({ done, title, onBack, extra }: { done: BackupD
         </div>
         <div className="perforated mx-9" />
         <div className="grid grid-cols-3 gap-0 px-9 py-5">
-          <Stat k="Backup" v={r.is_zip ? human(r.size) : "folder"} sub={r.is_zip ? "ZIP fajl" : "običan folder"} />
-          <Stat k="Razgovora" v={num(r.convs)} sub={[r.has_html && "Pregled.html", r.has_md && "Markdown"].filter(Boolean).join(" + ") || "samo original"} />
-          <Stat k="Trajanje" v={`${r.seconds < 10 ? r.seconds.toFixed(1).replace(".", ",") : Math.round(r.seconds)} s`} sub="kopiranje + provera" />
+          <Stat k="Backup" v={r.is_zip ? human(r.size) : "folder"} sub={r.is_zip ? L("ZIP fajl", "ZIP file") : L("običan folder", "plain folder")} />
+          <Stat k={L("Razgovora", "Conversations")} v={num(r.convs)} sub={[r.has_html && (r.overview || "HTML"), r.has_md && "Markdown"].filter(Boolean).join(" + ") || L("samo original", "original only")} />
+          <Stat k={L("Trajanje", "Took")} v={`${r.seconds < 10 ? L(r.seconds.toFixed(1).replace(".", ","), r.seconds.toFixed(1)) : Math.round(r.seconds)} s`} sub={L("kopiranje + provera", "copy + verification")} />
         </div>
         <div className="mono selectable border-t border-line bg-card-2 px-9 py-3 text-[11.5px] text-muted">{r.path_tilde}</div>
       </div>
@@ -60,7 +61,7 @@ export function BackupResultView({ done, title, onBack, extra }: { done: BackupD
       {extra}
 
       <div className="card rise mt-5 px-9 py-6" style={rise(2)}>
-        <div className="eyebrow mb-2">Izveštaj</div>
+        <div className="eyebrow mb-2">{L("Izveštaj", "Report")}</div>
         <Lines lines={done.lines.slice(1).filter(([, t]) => !t.startsWith("Backup: "))} />
       </div>
     </div>

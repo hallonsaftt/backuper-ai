@@ -4,6 +4,8 @@
 use crate::env::{is_within, real, Env};
 use crate::readable::build_readable;
 use crate::scan::*;
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use crate::verify::{verify_backup, VerifyResult};
 use serde::Serialize;
@@ -80,7 +82,7 @@ impl Sink for ZipSink {
         drop(f);
         set_path_mode(&self.part, 0o600)?;
         if fs::symlink_metadata(&self.final_path).is_ok() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{} već postoji", self.final_path.display())));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, tf!("{} već postoji", "{} already exists", self.final_path.display())));
         }
         fs::rename(&self.part, &self.final_path)?;
         Ok(self.final_path.clone())
@@ -122,7 +124,7 @@ impl Sink for DirSink {
     }
     fn close(self: Box<Self>) -> io::Result<PathBuf> {
         if fs::symlink_metadata(&self.final_path).is_ok() {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("{} već postoji", self.final_path.display())));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, tf!("{} već postoji", "{} already exists", self.final_path.display())));
         }
         fs::rename(&self.part, &self.final_path)?;
         Ok(self.final_path.clone())
@@ -156,7 +158,7 @@ pub fn capture(src: &Path) -> io::Result<Captured> {
     for attempt in 0..3 {
         let m1 = fs::metadata(src)?;
         if !m1.is_file() {
-            return Err(io::Error::other("nije običan fajl"));
+            return Err(io::Error::other(t("nije običan fajl", "not a regular file")));
         }
         let mut spool = tempfile::spooled_tempfile(64 << 20);
         let mut h = Sha256::new();
@@ -187,7 +189,7 @@ pub fn capture(src: &Path) -> io::Result<Captured> {
         }
         std::thread::sleep(Duration::from_millis(300));
     }
-    Err(io::Error::other("neočekivano"))
+    Err(io::Error::other(t("neočekivano", "unexpected")))
 }
 
 pub fn unique_name(dest: &Path, prefix: &str) -> String {
@@ -206,19 +208,19 @@ pub fn dest_ok(env: &Env, p: &Path) -> Option<String> {
     let rp = real(p).unwrap_or(p.to_path_buf());
     match fs::metadata(&rp) {
         Ok(m) if m.is_dir() => {}
-        _ => return Some("Taj folder ne postoji.".into()),
+        _ => return Some(t("Taj folder ne postoji.", "That folder doesn't exist.").into()),
     }
     let probe = rp.join(format!(".claude-backup-probe-{}", std::process::id()));
     match OpenOptions::new().write(true).create_new(true).open(&probe) {
         Ok(_) => {
             let _ = fs::remove_file(&probe); // naš probni fajl
         }
-        Err(e) => return Some(format!("U taj folder ne može da se piše ({}).", os_err(&e))),
+        Err(e) => return Some(tf!("U taj folder ne može da se piše ({}).", "Can't write to that folder ({}).", os_err(&e))),
     }
     for src in [&env.claude, &env.app, &env.tmp] {
         let s = real(src).unwrap_or(src.clone());
         if is_within(&rp, &s) {
-            return Some("Backup ne sme da ide u Claude-ov folder — izaberi drugi.".into());
+            return Some(t("Backup ne sme da ide u Claude-ov folder — izaberi drugi.", "A backup can't go inside Claude's own folder — pick another one.").into());
         }
     }
     None
@@ -277,6 +279,8 @@ pub struct BackupResult {
     pub convs: u64,
     pub has_html: bool,
     pub has_md: bool,
+    /// name of the HTML overview inside this backup (Overview.html / Pregled.html)
+    pub overview: String,
     pub verify: VerifyResult,
     pub failed: Vec<(String, String)>,
     pub unstable: Vec<String>,
@@ -297,66 +301,112 @@ pub fn select_for(inv: &Inventory, o: &BackupOpts) -> Vec<FEntry> {
 // ---------------------------------------------------------------- tekstovi u backupu
 
 pub fn readme_text(o: &BackupOpts, created: &str, env: &Env) -> String {
+    let nm = crate::i18n::names();
+    let win = cfg!(windows);
     let mut l: Vec<String> = vec![format!("CLAUDE BACKUP — {created}"), "=".repeat(40), String::new()];
     let is_proj = o.scope.get("type").and_then(|t| t.as_str()) == Some("project");
     if is_proj {
         let cwd = o.scope.get("cwd").and_then(|c| c.as_str()).unwrap_or("");
-        l.push(format!("Ovo je istorija JEDNOG projekta: {}", env.tilde(Path::new(cwd))));
-        l.push("(razgovori, memorija projekta, slike, checkpoint snimci i Code tab kartice tog projekta)".into());
+        l.push(tf!("Ovo je istorija JEDNOG projekta: {}", "This is the history of ONE project: {}", env.tilde(Path::new(cwd))));
+        l.push(t("(razgovori, memorija projekta, slike, checkpoint snimci i Code tab kartice tog projekta)",
+                 "(that project's conversations, project memory, images, checkpoints and Code tab cards)").into());
         l.push(String::new());
     }
-    l.push("Šta je ovde".into());
-    l.push("-----------".into());
+    l.push(t("Šta je ovde", "What's in here").into());
+    l.push(t("-----------", "--------------").into());
     if is_proj {
-        l.push("kucane-poruke.jsonl  Poruke koje si kucao u ovom projektu (iz ~/.claude/history.jsonl).".into());
+        l.push(format!("{:<21}{}", nm.prompts, t("Poruke koje si kucao u ovom projektu (iz ~/.claude/history.jsonl).",
+                                                 "The prompts you typed in this project (from ~/.claude/history.jsonl).")));
     }
     if o.html {
-        l.push("Pregled.html      Svi razgovori za čitanje u browseru (dupli klik).".into());
+        l.push(format!("{:<18}{}", nm.overview, t("Svi razgovori za čitanje u browseru (dupli klik).", "Every conversation, readable in a browser (double-click).")));
     }
     if o.md {
-        l.push("citljivo-md/      Isti razgovori kao Markdown (.md) fajlovi; spisak je u INDEX.md.".into());
+        l.push(format!("{:<18}{}", format!("{}/", nm.md_dir), t("Isti razgovori kao Markdown (.md) fajlovi; spisak je u INDEX.md.",
+                                                               "The same conversations as Markdown (.md) files; the list is in INDEX.md.")));
     }
-    for s in [
-        "original/         TAČNE kopije Claude fajlova, bajt po bajt. Iz ovoga se vraća:",
-        "  dot-claude/        = ~/.claude (razgovori, memorija, podešavanja, skillovi…)",
-        "  claude.json        = ~/.claude.json",
-        if cfg!(windows) { "  claude-app/        = %APPDATA%\\Claude (Code tab lista, Cowork…)" } else { "  claude-app/        = ~/Library/Application Support/Claude (Code tab lista, Cowork…)" },
-        if cfg!(windows) { "  claude-tmp/        = %TEMP%\\claude (slike i scratchpad iz razgovora)" } else { "  claude-tmp/        = /private/tmp/claude-<broj> (slike i scratchpad iz razgovora)" },
-        "  projekti/          = CLAUDE.md, .claude/ i .mcp.json iz foldera projekata",
-        "                       (tačna putanja svakog projekta je u izvestaj.txt)",
-        "MANIFEST.json     Spisak svih fajlova: odakle su, veličina, vreme izmene, SHA-256.",
-        "SHA256SUMS.txt    Kontrolni zbirovi svih fajlova.",
-        "izvestaj.txt      Šta je sačuvano, šta nije i zašto.",
-        "",
-        if cfg!(windows) { "Folder .claude je običan folder — vidi se u Exploreru." } else { "Folderi čije ime počinje tačkom (.claude) su u Finderu sakriveni — Cmd+Shift+. ih prikazuje." },
-        "",
-        "Kako da proverim da je backup ispravan",
-        "--------------------------------------",
-        "Claude Backup aplikacija  →  „Proveri backup”",
-        if cfg!(windows) { "ili u Git Bash-u, u ovom folderu:   sha256sum -c SHA256SUMS.txt" } else { "ili u Terminalu, u ovom folderu:   shasum -a 256 -c SHA256SUMS.txt" },
-        "",
-        "Kako da vratim",
-        "--------------",
-        "1. Zatvori Claude.",
-        "2. Claude Backup aplikacija  →  „Vrati iz backupa”  →  izaberi ovaj backup.",
-        "   Program samo DODAJE fajlove koji fale. Tvoje postojeće fajlove ne dira.",
-        "3. Na novom računaru stavi projekte na iste putanje kao ranije, da bi",
-        "   „claude --resume” u tom folderu pronašao stare razgovore.",
-        "",
-        "Privatnost",
-        "----------",
-        "Razgovori mogu da sadrže lozinke i API ključeve koje si nalepio ili koje je Claude",
-        "pročitao iz .env fajlova. Čuvaj ovaj backup kao privatan.",
-        "Login token (~/.claude/.credentials.json) namerno nije sačuvan — posle vraćanja se",
-        "samo ponovo uloguješ.",
-        "",
-        "Chat tab razgovori nisu deo ovog backupa: oni su na Anthropic serveru.",
-        "Izvoz: claude.ai → Settings → Privacy → Export data.",
-        "",
-    ] {
-        l.push(s.into());
-    }
-    l.push(format!("Napravila Claude Backup aplikacija ({TOOL_VERSION})"));
+    let body: Vec<String> = if crate::i18n::sr() {
+        vec![
+            "original/         TAČNE kopije Claude fajlova, bajt po bajt. Iz ovoga se vraća:".into(),
+            "  dot-claude/        = ~/.claude (razgovori, memorija, podešavanja, skillovi…)".into(),
+            "  claude.json        = ~/.claude.json".into(),
+            if win { "  claude-app/        = %APPDATA%\\Claude (Code tab lista, Cowork…)" } else { "  claude-app/        = ~/Library/Application Support/Claude (Code tab lista, Cowork…)" }.into(),
+            if win { "  claude-tmp/        = %TEMP%\\claude (slike i scratchpad iz razgovora)" } else { "  claude-tmp/        = /private/tmp/claude-<broj> (slike i scratchpad iz razgovora)" }.into(),
+            "  projekti/          = CLAUDE.md, .claude/ i .mcp.json iz foldera projekata".into(),
+            format!("                       (tačna putanja svakog projekta je u {})", nm.report),
+            "MANIFEST.json     Spisak svih fajlova: odakle su, veličina, vreme izmene, SHA-256.".into(),
+            "SHA256SUMS.txt    Kontrolni zbirovi svih fajlova.".into(),
+            format!("{:<18}Šta je sačuvano, šta nije i zašto.", nm.report),
+            String::new(),
+            if win { "Folder .claude je običan folder — vidi se u Exploreru." } else { "Folderi čije ime počinje tačkom (.claude) su u Finderu sakriveni — Cmd+Shift+. ih prikazuje." }.into(),
+            String::new(),
+            "Kako da proverim da je backup ispravan".into(),
+            "--------------------------------------".into(),
+            "Claude Backup aplikacija  →  „Backupi i vraćanje”  →  „Proveri”".into(),
+            if win { "ili u Git Bash-u, u ovom folderu:   sha256sum -c SHA256SUMS.txt" } else { "ili u Terminalu, u ovom folderu:   shasum -a 256 -c SHA256SUMS.txt" }.into(),
+            String::new(),
+            "Kako da vratim".into(),
+            "--------------".into(),
+            "1. Zatvori Claude.".into(),
+            "2. Claude Backup aplikacija  →  „Backupi i vraćanje”  →  „Vrati…” kod ovog backupa.".into(),
+            "   Program samo DODAJE fajlove koji fale. Tvoje postojeće fajlove ne dira.".into(),
+            "3. Na novom računaru stavi projekte na iste putanje kao ranije, da bi".into(),
+            "   „claude --resume” u tom folderu pronašao stare razgovore.".into(),
+            String::new(),
+            "Privatnost".into(),
+            "----------".into(),
+            "Razgovori mogu da sadrže lozinke i API ključeve koje si nalepio ili koje je Claude".into(),
+            "pročitao iz .env fajlova. Čuvaj ovaj backup kao privatan.".into(),
+            "Login token (~/.claude/.credentials.json) namerno nije sačuvan — posle vraćanja se".into(),
+            "samo ponovo uloguješ.".into(),
+            String::new(),
+            "Chat tab razgovori nisu deo ovog backupa: oni su na Anthropic serveru.".into(),
+            "Izvoz: claude.ai → Settings → Privacy → Export data.".into(),
+            String::new(),
+            format!("Napravila Claude Backup aplikacija ({TOOL_VERSION})"),
+        ]
+    } else {
+        vec![
+            "original/         EXACT copies of Claude's files, byte for byte. Restores come from here:".into(),
+            "  dot-claude/        = ~/.claude (conversations, memory, settings, skills…)".into(),
+            "  claude.json        = ~/.claude.json".into(),
+            if win { "  claude-app/        = %APPDATA%\\Claude (Code tab list, Cowork…)" } else { "  claude-app/        = ~/Library/Application Support/Claude (Code tab list, Cowork…)" }.into(),
+            if win { "  claude-tmp/        = %TEMP%\\claude (images and scratchpad from conversations)" } else { "  claude-tmp/        = /private/tmp/claude-<number> (images and scratchpad from conversations)" }.into(),
+            "  projekti/          = CLAUDE.md, .claude/ and .mcp.json from project folders".into(),
+            format!("                       (each project's exact path is in {})", nm.report),
+            "MANIFEST.json     Every file: where it came from, size, modification time, SHA-256.".into(),
+            "SHA256SUMS.txt    Checksums of every file.".into(),
+            format!("{:<18}What was saved, what wasn't, and why.", nm.report),
+            String::new(),
+            if win { "The .claude folder is a normal folder — Explorer shows it." } else { "Folders whose name starts with a dot (.claude) are hidden in Finder — Cmd+Shift+. shows them." }.into(),
+            String::new(),
+            "How to check the backup is intact".into(),
+            "---------------------------------".into(),
+            "Claude Backup app  →  “Backups & restore”  →  “Verify”".into(),
+            if win { "or in Git Bash, in this folder:   sha256sum -c SHA256SUMS.txt" } else { "or in Terminal, in this folder:   shasum -a 256 -c SHA256SUMS.txt" }.into(),
+            String::new(),
+            "How to restore".into(),
+            "--------------".into(),
+            "1. Quit Claude.".into(),
+            "2. Claude Backup app  →  “Backups & restore”  →  “Restore…” next to this backup.".into(),
+            "   It only ADDS files that are missing. Your existing files are never touched.".into(),
+            "3. On a new computer, put your projects at the same paths as before, so that".into(),
+            "   “claude --resume” in that folder finds the old conversations.".into(),
+            String::new(),
+            "Privacy".into(),
+            "-------".into(),
+            "Conversations can contain passwords and API keys you pasted, or that Claude".into(),
+            "read from .env files. Keep this backup private.".into(),
+            "The login token (~/.claude/.credentials.json) is deliberately not saved — after".into(),
+            "restoring you simply log in again.".into(),
+            String::new(),
+            "Chat tab conversations are not part of this backup: they live on Anthropic's servers.".into(),
+            "Export: claude.ai → Settings → Privacy → Export data.".into(),
+            String::new(),
+            format!("Made by the Claude Backup app ({TOOL_VERSION})"),
+        ]
+    };
+    l.extend(body);
     l.join("\n") + "\n"
 }
 
@@ -364,37 +414,39 @@ pub fn readme_text(o: &BackupOpts, created: &str, env: &Env) -> String {
 fn report_text(inv: &Inventory, files: &[Value], failed: &[(String, String)], unstable: &[String],
                per_cat: &[CatCount], o: &BackupOpts, created: &str, convs: u64) -> String {
     let env = &inv.env;
+    let nm = crate::i18n::names();
     let host = hostname();
     let mut l: Vec<String> = vec![
-        format!("IZVEŠTAJ — Claude Backup {created}"),
+        tf!("IZVEŠTAJ — Claude Backup {}", "REPORT — Claude Backup {}", created),
         "=".repeat(40),
         String::new(),
-        format!("Računar: {}   Korisnik: {}   Claude Code: {}", host,
-                env.home.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-                if inv.cc_version.is_empty() { "nepoznato" } else { &inv.cc_version }),
+        tf!("Računar: {}   Korisnik: {}   Claude Code: {}", "Computer: {}   User: {}   Claude Code: {}", host,
+            env.home.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
+            if inv.cc_version.is_empty() { t("nepoznato", "unknown") } else { &inv.cc_version }),
         String::new(),
-        "Sačuvano".into(),
-        "--------".into(),
+        t("Sačuvano", "Saved").into(),
+        t("--------", "-----").into(),
     ];
     for c in per_cat {
         l.push(format!("  ✔ {:<40} {:>14}   {:>10}", c.title, n_files(c.files), human(c.bytes)));
     }
     let total: u64 = files.iter().map(|f| f["size"].as_u64().unwrap_or(0)).sum();
     l.push(String::new());
-    l.push(format!("Ukupno: {}, {}. Svaki fajl je kopiran bajt po bajt i proveren SHA-256 zbirom.", n_files(files.len() as u64), human(total)));
+    l.push(tf!("Ukupno: {}, {}. Svaki fajl je kopiran bajt po bajt i proveren SHA-256 zbirom.",
+               "Total: {}, {}. Every file was copied byte for byte and checked with SHA-256.", n_files(files.len() as u64), human(total)));
     l.push(String::new());
     if convs > 0 {
         let mut fm = vec![];
         if o.html {
-            fm.push("HTML (Pregled.html)");
+            fm.push(format!("HTML ({})", nm.overview));
         }
         if o.md {
-            fm.push("Markdown (citljivo-md/)");
+            fm.push(format!("Markdown ({}/)", nm.md_dir));
         }
-        l.push(format!("Čitljiva verzija: {} — {}", n_convs(convs), fm.join(" + ")));
+        l.push(tf!("Čitljiva verzija: {} — {}", "Readable version: {} — {}", n_convs(convs), fm.join(" + ")));
         l.push(String::new());
     }
-    l.push("Projekti".into());
+    l.push(t("Projekti", "Projects").into());
     l.push("--------".into());
     let mut prs: Vec<&Proj> = inv.projects.values().collect();
     prs.sort_by(|a, b| b.last.partial_cmp(&a.last).unwrap_or(std::cmp::Ordering::Equal));
@@ -405,14 +457,14 @@ fn report_text(inv: &Inventory, files: &[Value], failed: &[(String, String)], un
             (None, None) => true,
         };
         l.push(format!("  {} {}", if sel { "✔" } else { "–" }, if pr.cwd.is_empty() { pr.key.clone() } else { env.tilde(Path::new(&pr.cwd)) }));
-        l.push(format!("      razgovori: ~/.claude/projects/{}   ({})", pr.key, n_convs(pr.sessions)));
+        l.push(tf!("      razgovori: ~/.claude/projects/{}   ({})", "      conversations: ~/.claude/projects/{}   ({})", pr.key, n_convs(pr.sessions)));
         if !pr.slug.is_empty() {
-            l.push(format!("      Claude fajlovi projekta u backupu: original/projekti/{}/", pr.slug));
+            l.push(tf!("      Claude fajlovi projekta u backupu: original/projekti/{}/", "      the project's Claude files in this backup: original/projekti/{}/", pr.slug));
         }
     }
     if !failed.is_empty() {
         l.push(String::new());
-        l.push("NIJE MOGLO DA SE PROČITA (nije u backupu)".into());
+        l.push(t("NIJE MOGLO DA SE PROČITA (nije u backupu)", "COULD NOT BE READ (not in this backup)").into());
         l.push("-----------------------------------------".into());
         for (p, w) in failed {
             l.push(format!("  ✖ {p} — {w}"));
@@ -420,21 +472,22 @@ fn report_text(inv: &Inventory, files: &[Value], failed: &[(String, String)], un
     }
     if !unstable.is_empty() {
         l.push(String::new());
-        l.push("Menjali su se dok je backup radio (Claude je bio upaljen) — sačuvana je poslednja verzija:".into());
+        l.push(t("Menjali su se dok je backup radio (Claude je bio upaljen) — sačuvana je poslednja verzija:",
+                 "Changed while the backup was running (Claude was open) — the latest version was saved:").into());
         for p in unstable {
             l.push(format!("  ⚠ {p}"));
         }
     }
     if !inv.problems.is_empty() {
         l.push(String::new());
-        l.push("Upozorenja pri skeniranju".into());
+        l.push(t("Upozorenja pri skeniranju", "Warnings while scanning").into());
         l.push("-------------------------".into());
         for (p, w) in &inv.problems {
             l.push(format!("  ⚠ {p} — {w}"));
         }
     }
     l.push(String::new());
-    l.push("Namerno nije sačuvano".into());
+    l.push(t("Namerno nije sačuvano", "Deliberately not saved").into());
     l.push("---------------------".into());
     let mut seen = HashSet::new();
     for (p, w) in &inv.excluded {
@@ -442,8 +495,9 @@ fn report_text(inv: &Inventory, files: &[Value], failed: &[(String, String)], un
             l.push(format!("  – {p} — {w}"));
         }
     }
-    l.push("  – kod projekata — čuvaju se samo Claude fajlovi iz projekata".into());
-    l.push("  – Chat tab — nalazi se na Anthropic serveru (Settings → Privacy → Export data)".into());
+    l.push(t("  – kod projekata — čuvaju se samo Claude fajlovi iz projekata", "  – project code — only Claude's files are taken from projects").into());
+    l.push(t("  – Chat tab — nalazi se na Anthropic serveru (Settings → Privacy → Export data)",
+             "  – Chat tab — it lives on Anthropic's servers (Settings → Privacy → Export data)").into());
     l.join("\n") + "\n"
 }
 
@@ -481,16 +535,16 @@ pub fn run_backup(inv: &Inventory, o: &BackupOpts, cb: Cb, cancel: Option<&Atomi
     let mut unstable: Vec<String> = vec![];
     let mut per: BTreeMap<String, (u64, u64)> = BTreeMap::new();
     let total: u64 = entries.iter().map(|e| e.size).sum::<u64>().max(1);
-    let created = chrono::Local::now().format("%d.%m.%Y. u %H:%M").to_string();
+    let created = chrono::Local::now().format(t("%d.%m.%Y. u %H:%M", "%b %-d, %Y at %H:%M")).to_string();
 
     let result: io::Result<(PathBuf, u64)> = (|| {
         let mut done = 0u64;
         for (i, e) in entries.iter().enumerate() {
             if cancel.map(|c| c.load(Ordering::Relaxed)).unwrap_or(false) {
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "prekinuto"));
+                return Err(io::Error::new(io::ErrorKind::Interrupted, t("prekinuto", "cancelled")));
             }
             rep.emit("copy", done as f64 / total as f64,
-                     format!("{} / {} fajlova · {} / {}", num(i as u64 + 1), num(entries.len() as u64), human(done), human(total)),
+                     tf!("{} / {} fajlova · {} / {}", "{} / {} files · {} / {}", num(i as u64 + 1), num(entries.len() as u64), human(done), human(total)),
                      env.tilde(&e.src), false);
             let mut cap = match capture(&e.src) {
                 Ok(c) => c,
@@ -538,8 +592,9 @@ pub fn run_backup(inv: &Inventory, o: &BackupOpts, cb: Cb, cancel: Option<&Atomi
         }
         let per_cat: Vec<CatCount> = cats.iter().filter_map(|cid| per.get(cid).map(|(n, b)| CatCount {
             id: cid.clone(), title: cat_title(cid).into(), files: *n, bytes: *b })).collect();
-        gen("PROCITAJ_ME.txt", readme_text(o, &created, env).into_bytes())?;
-        gen("izvestaj.txt", report_text(inv, &files_meta, &failed, &unstable, &per_cat, o, &created, convs).into_bytes())?;
+        let nm = crate::i18n::names();
+        gen(nm.readme, readme_text(o, &created, env).into_bytes())?;
+        gen(nm.report, report_text(inv, &files_meta, &failed, &unstable, &per_cat, o, &created, convs).into_bytes())?;
         drop(gen);
         let mut categories = serde_json::Map::new();
         for cid in &cats {
@@ -596,7 +651,7 @@ pub fn run_backup(inv: &Inventory, o: &BackupOpts, cb: Cb, cancel: Option<&Atomi
         }
     };
     let vr = verify_backup(&out, cb);
-    rep.emit("rescan", 1.0, "Poredim backup sa trenutnim stanjem…", "", true);
+    rep.emit("rescan", 1.0, t("Poredim backup sa trenutnim stanjem…", "Comparing the backup with the current state…"), "", true);
     let now_inv = scan(env);
     let now = select_for(&now_inv, o);
     let saved: HashMap<String, (u64, i64)> = files_meta.iter().map(|f| (
@@ -628,6 +683,7 @@ pub fn run_backup(inv: &Inventory, o: &BackupOpts, cb: Cb, cancel: Option<&Atomi
         convs,
         has_html: o.html && convs > 0,
         has_md: o.md && convs > 0,
+        overview: crate::i18n::names().overview.into(),
         verify: vr,
         failed,
         unstable,
@@ -644,34 +700,35 @@ pub fn report_lines(r: &BackupResult) -> Vec<(String, String)> {
     let mut l: Vec<(String, String)> = vec![];
     let vr = &r.verify;
     if vr.passed() {
-        l.push(("ok".into(), format!("✔ Sačuvano {} ({}) — svaki je proveren i identičan originalu (SHA-256).", n_files(r.files), human(r.bytes))));
+        l.push(("ok".into(), tf!("✔ Sačuvano {} ({}) — svaki je proveren i identičan originalu (SHA-256).", "✔ Saved {} ({}) — each one checked and identical to the original (SHA-256).", n_files(r.files), human(r.bytes))));
     } else {
-        l.push(("err".into(), format!("✖ Provera: ispravno {} od {} {}", num(vr.ok), num(vr.total), vr.error)));
+        l.push(("err".into(), tf!("✖ Provera: ispravno {} od {} {}", "✖ Verification: {} of {} intact {}", num(vr.ok), num(vr.total), vr.error)));
     }
     l.push((String::new(), format!("Backup: {}  ({})", r.path_tilde, human(r.size))));
     if r.convs > 0 {
         let mut what = vec![];
-        if r.has_html { what.push("Pregled.html"); }
+        if r.has_html { what.push(crate::i18n::names().overview); }
         if r.has_md { what.push("Markdown"); }
-        l.push((String::new(), format!("Čitljivo: {} u {}", n_convs(r.convs), what.join(" i "))));
+        l.push((String::new(), tf!("Čitljivo: {} u {}", "Readable: {} in {}", n_convs(r.convs), what.join(t(" i ", " and ")))));
     }
-    l.push(("head".into(), "Sačuvano".into()));
+    l.push(("head".into(), t("Sačuvano", "Saved").into()));
     for c in &r.per_cat {
         l.push(("ok".into(), format!("✔ {} — {} · {}", c.title, n_files(c.files), human(c.bytes))));
     }
     if !r.failed.is_empty() {
-        l.push(("head".into(), "Nije moglo da se pročita".into()));
+        l.push(("head".into(), t("Nije moglo da se pročita", "Could not be read").into()));
         for (p, w) in r.failed.iter().take(6) {
             l.push(("err".into(), format!("✖ {p} — {w}")));
         }
     }
     if !r.unstable.is_empty() || !r.new_after.is_empty() || !r.changed_after.is_empty() {
-        l.push(("warn".into(), format!("⚠ Claude je radio tokom backupa: {} menjano dok je čitano, {} novih i {} promenjenih posle kopiranja.",
+        l.push(("warn".into(), tf!("⚠ Claude je radio tokom backupa: {} menjano dok je čitano, {} novih i {} promenjenih posle kopiranja.",
+            "⚠ Claude was working during the backup: {} changed while being read, {} new and {} changed after copying.",
             num(r.unstable.len() as u64), num(r.new_after.len() as u64), num(r.changed_after.len() as u64))));
     }
     if !r.problems.is_empty() {
-        l.push(("warn".into(), format!("⚠ {} pri skeniranju (spisak je u izvestaj.txt).",
-            plural(r.problems.len() as u64, "upozorenje", "upozorenja", "upozorenja"))));
+        l.push(("warn".into(), tf!("⚠ {} pri skeniranju (spisak je u {}).", "⚠ {} while scanning (listed in {}).",
+            n_warnings(r.problems.len() as u64), crate::i18n::names().report)));
     }
     l
 }

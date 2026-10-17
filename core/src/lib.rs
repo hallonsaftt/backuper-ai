@@ -9,6 +9,7 @@
 pub mod backup;
 pub mod cli;
 pub mod env;
+pub mod i18n;
 pub mod readable;
 pub mod restore;
 pub mod retention;

@@ -5,15 +5,16 @@ import { DestPicker } from "../components/DestPicker";
 import { BackupResultView } from "../components/ResultView";
 import { Callout, Check, cx, PageHead, rise, Section, Seg, Switch } from "../components/ui";
 import { useJob } from "../job";
-import { ago, human, nConvs, nFiles, num } from "../lib/format";
+import { ago, human, nConvs, nFiles } from "../lib/format";
 import type { BackupDone, Estimate, Overview } from "../types";
 import { T } from "../lib/platform";
+import { L } from "../lib/i18n";
 
-const PRESETS: [string, string, (id: string) => boolean][] = [
-  ["Preporučeno", "rec", () => true],
-  ["Samo Claude Code", "cc", (id) => ["code_sessions", "tmp_sessions", "global", "extensions", "project_files", "desktop_code"].includes(id)],
-  ["Samo Cowork", "cw", (id) => ["cowork", "desktop_config"].includes(id)],
-  ["Sve", "all", () => true],
+const PRESETS: [() => string, string, (id: string) => boolean][] = [
+  [() => L("Preporučeno", "Recommended"), "rec", () => true],
+  [() => L("Samo Claude Code", "Claude Code only"), "cc", (id) => ["code_sessions", "tmp_sessions", "global", "extensions", "project_files", "desktop_code"].includes(id)],
+  [() => L("Samo Cowork", "Cowork only"), "cw", (id) => ["cowork", "desktop_config"].includes(id)],
+  [() => L("Sve", "Everything"), "all", () => true],
 ];
 
 export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
@@ -54,34 +55,37 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
 
   const start = async () => {
     setError(null);
-    const d = await job.run<BackupDone>("start_backup", { req: { cats, projects: projArg, html, md, dest, zip } }, { name: "backup", title: "Pravim backup", cancellable: true });
+    const d = await job.run<BackupDone>("start_backup", { req: { cats, projects: projArg, html, md, dest, zip } }, { name: "backup", title: L("Pravim backup", "Making the backup"), cancellable: true });
     if (d.ok) {
       setDone(d.data);
       onDone();
     } else setError(d.error);
   };
 
-  if (done) return <BackupResultView done={done} title="Tvoja Claude istorija" onBack={() => setDone(null)} />;
+  if (done) return <BackupResultView done={done} title={L("Tvoja Claude istorija", "Your Claude history")} onBack={() => setDone(null)} />;
 
   const canStart = cats.length > 0 && !!dest && (allProjects || projects.length > 0);
 
   return (
     <div className="pb-28">
       <PageHead
-        eyebrow="Novi backup"
+        eyebrow={L("Novi backup", "New backup")}
         title={
           <>
-            Šta da <em className="display-wonk text-accent">sačuvam</em>?
+            {L("Šta da", "What should I")} <em className="display-wonk text-accent">{L("sačuvam", "save")}</em>?
           </>
         }
-        lead="Sve je već izabrano kako treba — samo izaberi gde da sačuvam i klikni dugme dole. Claude fajlove samo čitam; ništa se ne briše i ne menja."
+        lead={L(
+          "Sve je već izabrano kako treba — samo izaberi gde da sačuvam i klikni dugme dole. Claude fajlove samo čitam; ništa se ne briše i ne menja.",
+          "Everything is already selected the right way — just choose where to save and click the button below. Claude's files are only read; nothing is deleted or changed.",
+        )}
       />
 
-      <Section n="01" title="Sadržaj" i={1} right={
+      <Section n="01" title={L("Sadržaj", "Contents")} i={1} right={
         <div className="flex gap-1.5">
           {PRESETS.map(([label, id]) => (
             <button key={id} className="chip" data-on={preset === id} onClick={() => applyPreset(id)}>
-              {label}
+              {label()}
             </button>
           ))}
         </div>
@@ -117,25 +121,25 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
         </div>
       </Section>
 
-      <Section n="02" title="Projekti" hint="za razgovore, slike i Claude fajlove iz projekata" i={2}>
+      <Section n="02" title={L("Projekti", "Projects")} hint={L("za razgovore, slike i Claude fajlove iz projekata", "for conversations, images and Claude files from projects")} i={2}>
         <div className="card overflow-hidden">
           <div className="flex items-center gap-3 border-b border-line px-5 py-3.5">
             <Seg
               value={allProjects ? "all" : "some"}
               onChange={(v) => setAllProjects(v === "all")}
               options={[
-                ["all", `Svi projekti (${ov.projects.length})`],
-                ["some", "Samo izabrani"],
+                ["all", `${L("Svi projekti", "All projects")} (${ov.projects.length})`],
+                ["some", L("Samo izabrani", "Selected only")],
               ]}
             />
             {!allProjects && (
               <>
                 <div className="relative ml-auto">
                   <Search size={14} className="absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
-                  <input className="field h-[34px] w-[220px] pl-8 text-[13px]" placeholder="Traži projekat…" value={q} onChange={(e) => setQ(e.target.value)} />
+                  <input className="field h-[34px] w-[220px] pl-8 text-[13px]" placeholder={L("Traži projekat…", "Search projects…")} value={q} onChange={(e) => setQ(e.target.value)} />
                 </div>
                 <button className="btn btn-quiet" onClick={() => setProjects(projects.length ? [] : ov.projects.map((p) => p.key))}>
-                  {projects.length ? "Poništi" : "Sve"}
+                  {projects.length ? L("Poništi", "Clear") : L("Sve", "All")}
                 </button>
               </>
             )}
@@ -158,22 +162,41 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
               })}
             </div>
           )}
-          {allProjects && <div className="px-5 py-3 text-[12.5px] text-muted">Sve što pripada bilo kom projektu ide u backup — preporučeno.</div>}
+          {allProjects && <div className="px-5 py-3 text-[12.5px] text-muted">{L("Sve što pripada bilo kom projektu ide u backup — preporučeno.", "Everything that belongs to any project goes into the backup — recommended.")}</div>}
         </div>
       </Section>
 
       <Section n="03" title="Format" i={3}>
         <div className="card divide-y divide-line">
-          <Row title="Originalni Claude format" desc="Tačne kopije .jsonl i ostalih fajlova — to Claude ume da učita nazad. Uvek uključeno.">
+          <Row
+            title={L("Originalni Claude format", "Original Claude format")}
+            desc={L(
+              "Tačne kopije .jsonl i ostalih fajlova — to Claude ume da učita nazad. Uvek uključeno.",
+              "Exact copies of the .jsonl and other files — what Claude can load back. Always on.",
+            )}
+          >
             <Check on locked />
           </Row>
-          <Row title="Pregled.html" desc="Lepa stranica sa svim razgovorima — otvori u pregledaču i čitaj, bez Claude-a.">
+          <Row
+            title={L("Pregled.html", "Overview.html")}
+            desc={L("Lepa stranica sa svim razgovorima — otvori u pregledaču i čitaj, bez Claude-a.", "A nice page with every conversation — open it in a browser and read, no Claude needed.")}
+          >
             <Switch on={html} onChange={setHtml} />
           </Row>
-          <Row title="Markdown (.md)" desc="Svaki razgovor kao .md fajl — za Obsidian, Notion, VS Code ili pretragu.">
+          <Row
+            title="Markdown (.md)"
+            desc={L("Svaki razgovor kao .md fajl — za Obsidian, Notion, VS Code ili pretragu.", "Every conversation as an .md file — for Obsidian, Notion, VS Code or search.")}
+          >
             <Switch on={md} onChange={setMd} />
           </Row>
-          <Row title="Pakovanje" desc={zip ? "Jedan .zip fajl — lako se premešta i čuva." : `Običan folder — sve odmah vidljivo u ${T.inFm}.`}>
+          <Row
+            title={L("Pakovanje", "Packaging")}
+            desc={
+              zip
+                ? L("Jedan .zip fajl — lako se premešta i čuva.", "A single .zip file — easy to move and keep.")
+                : L(`Običan folder — sve odmah vidljivo u ${T.inFm}.`, `A plain folder — everything visible right away in ${T.inFm}.`)
+            }
+          >
             <Seg
               value={zip ? "zip" : "dir"}
               onChange={(v) => setZip(v === "zip")}
@@ -186,27 +209,27 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
         </div>
       </Section>
 
-      <Section n="04" title="Gde da sačuvam" i={4}>
+      <Section n="04" title={L("Gde da sačuvam", "Where to save")} i={4}>
         <DestPicker dests={ov.dests} value={dest} onChange={setDest} />
       </Section>
 
       {error && (
         <div className="mb-6">
-          <Callout tone="err" title="Backup nije napravljen">
+          <Callout tone="err" title={L("Backup nije napravljen", "The backup wasn't made")}>
             {error}
           </Callout>
         </div>
       )}
 
-      {/* donja traka */}
+      {/* bottom bar */}
       <div className="fixed right-0 bottom-0 left-[244px] z-20 border-t border-line-2 bg-bg/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-[980px] items-center gap-5 px-10 py-3.5">
           <div className="min-w-0 flex-1">
-            <div className="eyebrow">Ukupno</div>
+            <div className="eyebrow">{L("Ukupno", "Total")}</div>
             <div className="num mt-0.5 text-[15px] font-[600]">
               {est ? (
                 <>
-                  {nFiles(est.files)} <span className="text-muted">·</span> {human(est.bytes)} <span className="text-muted">·</span> <span className="font-[500] text-muted">{num(est.convs)} razgovora</span>
+                  {nFiles(est.files)} <span className="text-muted">·</span> {human(est.bytes)} <span className="text-muted">·</span> <span className="font-[500] text-muted">{nConvs(est.convs)}</span>
                 </>
               ) : (
                 "…"
@@ -214,7 +237,7 @@ export function Backup({ ov, onDone }: { ov: Overview; onDone: () => void }) {
             </div>
           </div>
           <button className="btn btn-primary btn-lg" disabled={!canStart} onClick={start}>
-            <PackagePlus size={18} /> Napravi backup
+            <PackagePlus size={18} /> {L("Napravi backup", "Back up now")}
           </button>
         </div>
       </div>

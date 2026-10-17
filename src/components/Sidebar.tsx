@@ -1,6 +1,7 @@
 import { Archive, CalendarClock, FolderGit2, Hourglass, LayoutGrid, LifeBuoy, PackagePlus, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Overview, Page } from "../types";
+import { L, type Lang } from "../lib/i18n";
 import { isMac } from "../lib/platform";
 import { cx } from "./ui";
 
@@ -11,7 +12,7 @@ interface Item {
   badge?: ReactNode;
 }
 
-export function Sidebar({ page, onNav, ov, locked, version }: { page: Page; onNav: (p: Page) => void; ov: Overview | null; locked: boolean; version: string }) {
+export function Sidebar({ page, onNav, ov, locked, version, lang, onLang }: { page: Page; onNav: (p: Page) => void; ov: Overview | null; locked: boolean; version: string; lang: Lang; onLang: (l: Lang) => void }) {
   const sched = ov?.schedule;
   const ret = ov?.retention;
   const schedDot = sched ? (sched.enabled && !sched.broken ? (sched.last_run && !sched.last_run.ok ? "warn" : "ok") : "off") : null;
@@ -19,32 +20,32 @@ export function Sidebar({ page, onNav, ov, locked, version }: { page: Page; onNa
 
   const groups: [string, Item[]][] = [
     [
-      "Arhiva",
+      L("Arhiva", "Archive"),
       [
-        { id: "overview", label: "Pregled", icon: <LayoutGrid size={17} /> },
-        { id: "backup", label: "Novi backup", icon: <PackagePlus size={17} /> },
-        { id: "project", label: "Istorija projekta", icon: <FolderGit2 size={17} /> },
-        { id: "archive", label: "Backupi i vraćanje", icon: <Archive size={17} /> },
+        { id: "overview", label: L("Pregled", "Overview"), icon: <LayoutGrid size={17} /> },
+        { id: "backup", label: L("Novi backup", "New backup"), icon: <PackagePlus size={17} /> },
+        { id: "project", label: L("Istorija projekta", "Project history"), icon: <FolderGit2 size={17} /> },
+        { id: "archive", label: L("Backupi i vraćanje", "Backups & restore"), icon: <Archive size={17} /> },
       ],
     ],
     [
-      "Zaštita",
+      L("Zaštita", "Protection"),
       [
         {
           id: "schedule",
-          label: "Automatski backup",
+          label: L("Automatski backup", "Automatic backup"),
           icon: <CalendarClock size={17} />,
           badge: schedDot && <Dot tone={schedDot} />,
         },
         {
           id: "retention",
-          label: "Čuvanje istorije",
+          label: L("Čuvanje istorije", "History retention"),
           icon: <Hourglass size={17} />,
           badge: ret && (retWarn ? <span className="mono rounded bg-warn/20 px-1.5 py-[1px] text-[10px] text-warn">{ret.effective}d</span> : <Dot tone="ok" />),
         },
       ],
     ],
-    ["", [{ id: "help", label: "Pomoć", icon: <LifeBuoy size={17} /> }]],
+    ["", [{ id: "help", label: L("Pomoć", "Help"), icon: <LifeBuoy size={17} /> }]],
   ];
 
   return (
@@ -55,7 +56,7 @@ export function Sidebar({ page, onNav, ov, locked, version }: { page: Page; onNa
         <Mark />
         <div data-tauri-drag-region>
           <div className="display text-[19px] leading-none font-[520] tracking-tight">Claude Backup</div>
-          <div className="mt-1.5 font-mono text-[9.5px] tracking-[0.18em] text-side-muted uppercase">arhiva razgovora</div>
+          <div className="mt-1.5 font-mono text-[9.5px] tracking-[0.18em] text-side-muted uppercase">{L("arhiva razgovora", "conversation archive")}</div>
         </div>
       </div>
 
@@ -92,10 +93,32 @@ export function Sidebar({ page, onNav, ov, locked, version }: { page: Page; onNa
       <div className="m-3 rounded-xl border border-white/[0.07] bg-white/[0.03] p-3.5">
         <div className="flex items-center gap-2 text-[12.5px] font-[600] text-side-text">
           <ShieldCheck size={15} className="text-[#8fbf88]" />
-          Samo čita. Ništa ne briše.
+          {L("Samo čita. Ništa ne briše.", "Read-only. Deletes nothing.")}
         </div>
-        <p className="mt-1 text-[11.5px] leading-snug text-side-muted">Svaki fajl se proverava SHA-256 zbirom. Login token se nikad ne kopira.</p>
-        <div className="mt-2.5 font-mono text-[9.5px] tracking-wider text-side-muted/70">v{version}</div>
+        <p className="mt-1 text-[11.5px] leading-snug text-side-muted">
+          {L("Svaki fajl se proverava SHA-256 zbirom. Login token se nikad ne kopira.", "Every file is checked with SHA-256. Your login token is never copied.")}
+        </p>
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="truncate font-mono text-[9.5px] tracking-wider text-side-muted/70">v{version}</span>
+          <div className="flex shrink-0 rounded-md border border-white/[0.1] p-[2px]" role="group" aria-label={L("Jezik", "Language")}>
+            {(["en", "sr"] as Lang[]).map((l) => (
+              <button
+                key={l}
+                disabled={locked}
+                onClick={() => onLang(l)}
+                className={cx(
+                  "h-[20px] rounded-[4px] px-2 font-mono text-[10px] tracking-wider uppercase transition-colors",
+                  lang === l ? "bg-white/[0.12] text-white" : "text-side-muted hover:text-side-text",
+                )}
+                title={l === "en" ? "English" : "Srpski"}
+                aria-label={l === "en" ? "English" : "Srpski"}
+                aria-pressed={lang === l}
+              >
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </aside>
   );

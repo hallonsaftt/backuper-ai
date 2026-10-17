@@ -1,4 +1,5 @@
-// Most prema Rust strani. Van Tauri-ja (npr. `npm run dev` u pregledaču) koristi lažne podatke iz mock.ts.
+// Bridge to the Rust side. Outside Tauri (e.g. `npm run dev` in a browser) it uses fake data from mock.ts.
+import { L } from "./lib/i18n";
 import type { JobDone, Progress } from "./types";
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -60,7 +61,7 @@ export async function pickZip(): Promise<string | null> {
     const r = await open({
       directory: false,
       multiple: false,
-      title: "Izaberi Claude backup (.zip)",
+      title: L("Izaberi Claude backup (.zip)", "Choose a Claude backup (.zip)"),
       filters: [{ name: "Claude backup", extensions: ["zip"] }],
     });
     return typeof r === "string" ? r : null;

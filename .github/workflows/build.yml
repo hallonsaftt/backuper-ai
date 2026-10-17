@@ -61,7 +61,11 @@ jobs:
         shell: bash
         run: |
           python3 --version | tee -a "$LOG"
-          tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a "$LOG"
+          CB_LANG=en tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a "$LOG"
+
+      - name: E2E testovi — srpski
+        shell: bash
+        run: CB_LANG=sr tests/e2e.sh "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Claude Backup.app/Contents/MacOS/claude-backup" python/claude_backup.py 2>&1 | tee -a "$LOG"
 
       - name: Instaler jednom komandom (install.sh)
         shell: bash
@@ -80,7 +84,7 @@ jobs:
           CB_DEST="$D" CB_NO_OPEN=1 bash install.sh "$RUNNER_TEMP/dl.dmg" 2>&1 | tee -a "$LOG"
           check
           # 2) poslednji release preko GitHub CLI (privatni repo) — preko postojeće instalacije
-          CB_DEST="$D" CB_NO_OPEN=1 bash install.sh 2>&1 | tee -a "$LOG"
+          CB_LANG=sr CB_DEST="$D" CB_NO_OPEN=1 bash install.sh 2>&1 | tee -a "$LOG"
           check
 
       - uses: actions/upload-artifact@v4
@@ -138,7 +142,11 @@ jobs:
 
       - name: E2E testovi na lažnom home folderu
         shell: bash
-        run: tests/e2e.sh "src-tauri/target/release/claude-backup.exe" 2>&1 | tee -a "$LOG"
+        run: CB_LANG=en tests/e2e.sh "src-tauri/target/release/claude-backup.exe" 2>&1 | tee -a "$LOG"
+
+      - name: E2E testovi — srpski
+        shell: bash
+        run: CB_LANG=sr tests/e2e.sh "src-tauri/target/release/claude-backup.exe" 2>&1 | tee -a "$LOG"
 
       - name: Tiha instalacija i pokretanje instalirane aplikacije
         shell: pwsh

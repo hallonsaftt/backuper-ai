@@ -7,6 +7,8 @@ use crate::restore::*;
 use crate::retention::*;
 use crate::scan::*;
 use crate::schedule::*;
+use crate::i18n::t;
+use crate::tf;
 use crate::util::*;
 use crate::verify::*;
 use serde_json::json;
@@ -36,6 +38,7 @@ struct Args {
     unschedule: bool,
     project_backup: Option<String>,
     list: bool,
+    lang: Option<String>,
 }
 
 const CLI_FLAGS: [&str; 10] = ["--backup", "--verify", "--restore", "--set-retention", "--schedule", "--unschedule",
@@ -51,7 +54,7 @@ fn parse(args: &[String]) -> Result<Args, String> {
     let mut i = 1;
     let val = |i: &mut usize| -> Result<String, String> {
         *i += 1;
-        args.get(*i).cloned().ok_or_else(|| format!("{} traži vrednost", args[*i - 1]))
+        args.get(*i).cloned().ok_or_else(|| tf!("{} traži vrednost", "{} needs a value", args[*i - 1]))
     };
     while i < args.len() {
         match args[i].as_str() {
@@ -66,8 +69,8 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--verify" => a.verify = Some(val(&mut i)?),
             "--restore" => a.restore = Some(val(&mut i)?),
             "--yes" => a.yes = true,
-            "--set-retention" => a.set_retention = Some(val(&mut i)?.parse().map_err(|_| "--set-retention traži broj")?),
-            "--keep" => a.keep = val(&mut i)?.parse().map_err(|_| "--keep traži broj")?,
+            "--set-retention" => a.set_retention = Some(val(&mut i)?.parse().map_err(|_| t("--set-retention traži broj", "--set-retention needs a number"))?),
+            "--keep" => a.keep = val(&mut i)?.parse().map_err(|_| t("--keep traži broj", "--keep needs a number"))?,
             "--notify" => a.notify = true,
             "--scheduled" => a.scheduled = true,
             "--if-due" => a.if_due = true,
@@ -84,8 +87,9 @@ fn parse(args: &[String]) -> Result<Args, String> {
                 }
             }
             "--list" => a.list = true,
+            "--lang" => a.lang = Some(val(&mut i)?),
             x if x.starts_with("-psn_") => {} // macOS ponekad doda ovo
-            other => return Err(format!("nepoznata opcija: {other}")),
+            other => return Err(tf!("nepoznata opcija: {}", "unknown option: {}", other)),
         }
         i += 1;
     }
@@ -115,8 +119,18 @@ fn ts() -> String {
 }
 
 pub fn run(args: Vec<String>) -> i32 {
+    // jezik: --lang en|sr, inače sačuvan izbor iz aplikacije (podrazumevano engleski)
+    let env = Env::new();
+    crate::i18n::init(&env);
+    if let Some(i) = args.iter().position(|a| a == "--lang") {
+        if let Some(l) = args.get(i + 1) {
+            crate::i18n::set_lang(l);
+        }
+    }
     if args.iter().any(|a| a == "--help") {
-        println!("Claude Backup — komandna linija\n\n  --backup [--only a,b] [--all] [--format html,md|none] [--dest FOLDER] [--folder]\n  --project-backup [FOLDER] [--zip]\n  --verify PUTANJA\n  --restore PUTANJA [--yes]\n  --set-retention DANA\n  --schedule daily|weekly|monthly [--at SS:MM] [--keep N] [--dest FOLDER]\n  --unschedule\n  --list");
+        println!("{}", t(
+            "Claude Backup — komandna linija\n\n  --backup [--only a,b] [--all] [--format html,md|none] [--dest FOLDER] [--folder]\n  --project-backup [FOLDER] [--zip]\n  --verify PUTANJA\n  --restore PUTANJA [--yes]\n  --set-retention DANA\n  --schedule daily|weekly|monthly [--at SS:MM] [--keep N] [--dest FOLDER]\n  --unschedule\n  --list\n  --lang en|sr",
+            "Claude Backup — command line\n\n  --backup [--only a,b] [--all] [--format html,md|none] [--dest FOLDER] [--folder]\n  --project-backup [FOLDER] [--zip]\n  --verify PATH\n  --restore PATH [--yes]\n  --set-retention DAYS\n  --schedule daily|weekly|monthly [--at HH:MM] [--keep N] [--dest FOLDER]\n  --unschedule\n  --list\n  --lang en|sr"));
         return 0;
     }
     if args.iter().any(|a| a == "--version") {
@@ -130,30 +144,29 @@ pub fn run(args: Vec<String>) -> i32 {
             return 1;
         }
     };
-    let env = Env::new();
     #[cfg(windows)]
     win_stdio(&env, a.scheduled);
     let none = no_progress();
 
     if a.list {
         let inv = scan(&env);
-        println!("Claude podaci na ovom računaru");
+        println!("{}", t("Claude podaci na ovom računaru", "Claude data on this computer"));
         for c in &inv.cats {
             println!("  {} {:<40} {}   [{}]", if c.files.is_empty() { "–" } else { "✔" }, c.title, cat_note(&inv, &c.id, None), c.id);
         }
-        println!("\nProjekti");
+        println!("\n{}", t("Projekti", "Projects"));
         let mut ps: Vec<&Proj> = inv.projects.values().collect();
         ps.sort_by(|x, y| y.last.partial_cmp(&x.last).unwrap_or(std::cmp::Ordering::Equal));
         for p in ps {
             println!("  {}  —  {}, {}   [{}]", if p.cwd.is_empty() { p.key.clone() } else { env.tilde(Path::new(&p.cwd)) }, n_convs(p.sessions), human(p.size), p.key);
         }
         let r = retention_info(&env, &inv.cc_version);
-        println!("\nČuvanje istorije\n  cleanupPeriodDays: {}   Claude Code: {}",
-                 r.cleanup.map(|c| c.to_string()).unwrap_or("nije podešeno (30)".into()),
+        println!("\n{}\n  cleanupPeriodDays: {}   Claude Code: {}", t("Čuvanje istorije", "History retention"),
+                 r.cleanup.map(|c| c.to_string()).unwrap_or(t("nije podešeno (30)", "not set (30)").into()),
                  if inv.cc_version.is_empty() { "?" } else { &inv.cc_version });
         let st = schedule_status(&env);
         if st.enabled {
-            println!("\nAutomatski backup\n  {}", st.describe);
+            println!("\n{}\n  {}", t("Automatski backup", "Automatic backup"), st.describe);
         }
         return 0;
     }
@@ -198,7 +211,7 @@ pub fn run(args: Vec<String>) -> i32 {
             println!("  {c}");
         }
         if !r.backup.is_empty() {
-            println!("  stari fajl: {}", r.backup);
+            println!("  {} {}", t("stari fajl:", "old file:"), r.backup);
         }
         if !(a.backup || a.verify.is_some() || a.restore.is_some()) {
             return if r.ok { 0 } else { 1 };
@@ -208,18 +221,19 @@ pub fn run(args: Vec<String>) -> i32 {
         let p = PathBuf::from(expand(p, &env.home));
         let vr = verify_backup(&p, &none);
         if vr.passed() {
-            println!("✔ Backup je ispravan\n✔ Svih {} ({}) je identično onome što je sačuvano (SHA-256).", n_files(vr.ok), human(vr.bytes));
+            println!("{}", tf!("✔ Backup je ispravan\n✔ Svih {} ({}) je identično onome što je sačuvano (SHA-256).",
+                               "✔ The backup is intact\n✔ All {} ({}) are identical to what was saved (SHA-256).", n_files(vr.ok), human(vr.bytes)));
             return 0;
         }
         if !vr.error.is_empty() {
-            println!("✖ Backup ne može da se pročita\n✖ {}", vr.error);
+            println!("{}", tf!("✖ Backup ne može da se pročita\n✖ {}", "✖ The backup can't be read\n✖ {}", vr.error));
         } else {
-            println!("✖ Backup nije ispravan\n✖ Ispravno: {} od {}.", num(vr.ok), num(vr.total));
+            println!("{}", tf!("✖ Backup nije ispravan\n✖ Ispravno: {} od {}.", "✖ The backup is NOT intact\n✖ Intact: {} of {}.", num(vr.ok), num(vr.total)));
             for b in vr.bad.iter().take(6) {
-                println!("  oštećen: {b}");
+                println!("  {} {b}", t("oštećen:", "damaged:"));
             }
             for b in vr.missing.iter().take(6) {
-                println!("  nedostaje: {b}");
+                println!("  {} {b}", t("nedostaje:", "missing:"));
             }
         }
         return 2;
@@ -228,7 +242,7 @@ pub fn run(args: Vec<String>) -> i32 {
         let p = PathBuf::from(expand(p, &env.home));
         let vr = verify_backup(&p, &none);
         if !vr.passed() {
-            println!("✖ Backup nije ispravan — vraćanje otkazano. {}", vr.error);
+            println!("{}", tf!("✖ Backup nije ispravan — vraćanje otkazano. {}", "✖ The backup is not intact — restore cancelled. {}", vr.error));
             return 2;
         }
         let mut items = plan_restore(&env, vr.manifest.as_ref().unwrap(), &none);
@@ -237,10 +251,11 @@ pub fn run(args: Vec<String>) -> i32 {
             items.retain(|i| o.iter().any(|c| Some(c.as_str()) == i.e["cat"].as_str()));
         }
         let cnt = |s: &str| items.iter().filter(|i| i.status == s).count();
-        println!("Za vraćanje: {} · isto: {} · drugačije (ostaje tvoje): {} · bez projekta: {} · odbijeno: {}",
-                 cnt("add"), cnt("same"), cnt("diff"), cnt("noproj"), cnt("unsafe"));
+        println!("{}", tf!("Za vraćanje: {} · isto: {} · drugačije (ostaje tvoje): {} · bez projekta: {} · odbijeno: {}",
+                           "To restore: {} · same: {} · different (yours stays): {} · no project: {} · refused: {}",
+                           cnt("add"), cnt("same"), cnt("diff"), cnt("noproj"), cnt("unsafe")));
         if !a.yes {
-            println!("Ništa nije promenjeno. Dodaj --yes da vratiš fajlove koji fale.");
+            println!("{}", t("Ništa nije promenjeno. Dodaj --yes da vratiš fajlove koji fale.", "Nothing was changed. Add --yes to restore the missing files."));
             return 0;
         }
         let mut rd = match Reader::open(&p) {
@@ -251,7 +266,7 @@ pub fn run(args: Vec<String>) -> i32 {
             }
         };
         let r = apply_restore(&mut rd, &mut items, None, &none);
-        println!("✔ Vraćeno: {}", n_files(r.added));
+        println!("{}", tf!("✔ Vraćeno: {}", "✔ Restored: {}", n_files(r.added)));
         for (s, w) in &r.failed {
             println!("✖ {s} — {w}");
         }
@@ -263,13 +278,13 @@ pub fn run(args: Vec<String>) -> i32 {
         let pr = match project_for_path(&inv, &target) {
             Some(p) => p.clone(),
             None => {
-                println!("✖ {} nije Claude Code projekat (nema razgovora za taj folder).", env.tilde(&target));
+                println!("{}", tf!("✖ {} nije Claude Code projekat (nema razgovora za taj folder).", "✖ {} is not a Claude Code project (no conversations for that folder).", env.tilde(&target)));
                 return 1;
             }
         };
-        let dest = Path::new(&pr.cwd).join(PROJECT_BACKUP_DIR);
+        let dest = project_dest(Path::new(&pr.cwd));
         if let Err(e) = prepare_project_dest(&dest) {
-            println!("✖ Ne mogu da pišem u {}: {e}", env.tilde(&dest));
+            println!("{}", tf!("✖ Ne mogu da pišem u {}: {}", "✖ Can't write to {}: {}", env.tilde(&dest), e));
             return 1;
         }
         let (html, md) = formats(&a.format);
@@ -285,16 +300,16 @@ pub fn run(args: Vec<String>) -> i32 {
             prefix: format!("ClaudeBackup_{}", slug(&name, 30)),
             project_key: Some(pr.key.clone()),
             scope: json!({"type": "project", "cwd": pr.cwd, "key": pr.key}),
-            extra: if prompts.is_empty() { vec![] } else { vec![("kucane-poruke.jsonl".into(), prompts)] },
+            extra: if prompts.is_empty() { vec![] } else { vec![(crate::i18n::names().prompts.into(), prompts)] },
         };
         return match run_backup(&inv, &o, &none, None) {
             Ok(r) => {
-                println!("Istorija projekta {}", env.tilde(Path::new(&pr.cwd)));
+                println!("{}", tf!("Istorija projekta {}", "Project history {}", env.tilde(Path::new(&pr.cwd))));
                 print_lines(&report_lines(&r));
                 if r.verify.passed() { 0 } else { 2 }
             }
             Err(e) => {
-                println!("✖ Backup nije uspeo: {}", os_err(&e));
+                println!("{}", tf!("✖ Backup nije uspeo: {}", "✖ Backup failed: {}", os_err(&e)));
                 1
             }
         };
@@ -314,7 +329,7 @@ pub fn run(args: Vec<String>) -> i32 {
         }
         let dest = PathBuf::from(expand(a.dest.as_deref().unwrap_or("~/Desktop"), &env.home));
         if a.scheduled {
-            println!("\n[{}] Automatski backup → {}", ts(), dest.display());
+            println!("\n[{}] {} → {}", ts(), t("Automatski backup", "Automatic backup"), dest.display());
             if !dest.is_dir() && dest.parent().map(|p| p.is_dir()).unwrap_or(false) && !dest.starts_with("/Volumes/") {
                 let _ = std::fs::create_dir_all(&dest);
             }
@@ -323,16 +338,16 @@ pub fn run(args: Vec<String>) -> i32 {
         if err.is_some() && dest.starts_with("/Volumes/") {
             let vol: PathBuf = dest.components().take(3).collect();
             if !vol.exists() {
-                err = Some(format!("Spoljni disk „{}” nije prikačen.", vol.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
+                err = Some(tf!("Spoljni disk „{}” nije prikačen.", "External drive “{}” isn't connected.", vol.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default()));
             }
         }
         if let Some(e) = err {
             println!("✖ {e} ({})", dest.display());
             if a.notify {
-                notify("Claude Backup nije napravljen", &format!("{e} {}", env.tilde(&dest)));
+                notify(t("Claude Backup nije napravljen", "Claude Backup was not made"), &format!("{e} {}", env.tilde(&dest)));
             }
             if a.scheduled {
-                write_last_run(&env, false, &format!("nije napravljen: {e} ({})", env.tilde(&dest)), "");
+                write_last_run(&env, false, &tf!("nije napravljen: {} ({})", "not made: {} ({})", e, env.tilde(&dest)), "");
             }
             return 1;
         }
@@ -342,7 +357,7 @@ pub fn run(args: Vec<String>) -> i32 {
             None => inv.cats.iter().filter(|c| !c.files.is_empty() && (c.default || a.all)).map(|c| c.id.clone()).collect(),
         };
         if let Some(bad) = cats.iter().find(|c| !CAT_DEFS.iter().any(|d| d.id == c.as_str())) {
-            println!("✖ Nepoznata kategorija: {bad}");
+            println!("{}", tf!("✖ Nepoznata kategorija: {}", "✖ Unknown category: {}", bad));
             return 1;
         }
         let (html, md) = formats(&a.format);
@@ -357,18 +372,18 @@ pub fn run(args: Vec<String>) -> i32 {
             o.scope = json!({"type": "full", "auto": true});
         }
         if !inv.running.is_empty() {
-            println!("⚠ Upaljeno: {} — za najtačniji backup zatvori Claude.", inv.running.join(", "));
+            println!("{}", tf!("⚠ Upaljeno: {} — za najtačniji backup zatvori Claude.", "⚠ Running: {} — quit Claude for the most exact backup.", inv.running.join(", ")));
         }
         let r = match run_backup(&inv, &o, &none, None) {
             Ok(r) => r,
             Err(e) => {
                 let m = os_err(&e);
-                println!("✖ Backup nije uspeo: {m}");
+                println!("{}", tf!("✖ Backup nije uspeo: {}", "✖ Backup failed: {}", m));
                 if a.notify {
-                    notify("Claude Backup nije uspeo", &m);
+                    notify(t("Claude Backup nije uspeo", "Claude Backup failed"), &m);
                 }
                 if a.scheduled {
-                    write_last_run(&env, false, &format!("nije uspeo: {m}"), "");
+                    write_last_run(&env, false, &tf!("nije uspeo: {}", "failed: {}", m), "");
                 }
                 return 1;
             }
@@ -378,7 +393,7 @@ pub fn run(args: Vec<String>) -> i32 {
         if a.keep > 0 && r.verify.passed() && o.as_zip {
             removed = rotate_backups(&dest, a.keep, Path::new(&r.path));
             for p in &removed {
-                println!("  obrisan stari automatski backup: {}", p.file_name().unwrap_or_default().to_string_lossy());
+                println!("  {} {}", t("obrisan stari automatski backup:", "removed old automatic backup:"), p.file_name().unwrap_or_default().to_string_lossy());
             }
         }
         let n = r.per_cat.iter().find(|c| c.id == "code_sessions").map(|_| {
@@ -386,22 +401,22 @@ pub fn run(args: Vec<String>) -> i32 {
         }).unwrap_or(0);
         let mut warn = vec![];
         if !r.failed.is_empty() {
-            warn.push(format!("{} preskočeno", n_files(r.failed.len() as u64)));
+            warn.push(tf!("{} preskočeno", "{} skipped", n_files(r.failed.len() as u64)));
         }
         if !r.problems.is_empty() {
-            warn.push(format!("{} (vidi izvestaj.txt)", plural(r.problems.len() as u64, "upozorenje", "upozorenja", "upozorenja")));
+            warn.push(tf!("{} (vidi {})", "{} (see {})", n_warnings(r.problems.len() as u64), crate::i18n::names().report));
         }
         let summary = if r.verify.passed() {
-            let mut s = format!("{} · {} · proveren", n_convs(n), human(r.size));
+            let mut s = tf!("{} · {} · proveren", "{} · {} · verified", n_convs(n), human(r.size));
             if !warn.is_empty() {
                 s.push_str(&format!(" · {}", warn.join(", ")));
             }
             if !removed.is_empty() {
-                s.push_str(&format!(" · obrisano starih: {}", removed.len()));
+                s.push_str(&tf!(" · obrisano starih: {}", " · old ones removed: {}", removed.len()));
             }
             s
         } else {
-            format!("provera nije prošla: ispravno {} od {}", r.verify.ok, r.verify.total)
+            tf!("provera nije prošla: ispravno {} od {}", "verification failed: {} of {} intact", r.verify.ok, r.verify.total)
         };
         if a.notify {
             let title = if r.verify.passed() && warn.is_empty() { "Claude Backup ✔" } else if r.verify.passed() { "Claude Backup ⚠" } else { "Claude Backup ✖" };
@@ -412,7 +427,7 @@ pub fn run(args: Vec<String>) -> i32 {
         }
         return if r.verify.passed() { 0 } else { 2 };
     }
-    println!("Nema komande. Probaj --help.");
+    println!("{}", t("Nema komande. Probaj --help.", "No command. Try --help."));
     1
 }
 

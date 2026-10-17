@@ -1,5 +1,6 @@
 import { Check as CheckIcon, CircleCheck, CircleX, Info, Lock, TriangleAlert } from "lucide-react";
 import { useId, type CSSProperties, type ReactNode } from "react";
+import { L } from "../lib/i18n";
 import type { Line } from "../types";
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(" ");
@@ -88,7 +89,9 @@ export function Callout({ tone = "info", title, children, icon, action }: { tone
 export function Seal({ ok = true, label, size = 168, animate = true }: { ok?: boolean; label?: string; size?: number; animate?: boolean }) {
   const id = useId().replace(/:/g, "");
   const color = ok ? "var(--c-ok)" : "var(--c-err)";
-  const ring = ok ? "PROVERENO · SHA-256 · IDENTIČNO ORIGINALU · " : "PROVERA NIJE PROŠLA · NE OSLANJAJ SE · ";
+  const ring = ok
+    ? L("PROVERENO · SHA-256 · IDENTIČNO ORIGINALU · ", "VERIFIED · SHA-256 · IDENTICAL TO ORIGINAL · ")
+    : L("PROVERA NIJE PROŠLA · NE OSLANJAJ SE · ", "VERIFICATION FAILED · DO NOT RELY ON IT · ");
   return (
     <div className={cx(animate && "stamp")} style={{ width: size, height: size, transform: animate ? undefined : "rotate(-11deg)" }}>
       <svg viewBox="0 0 200 200" width={size} height={size} style={{ color, overflow: "visible" }}>

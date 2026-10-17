@@ -4,11 +4,22 @@ Aplikacija za **Mac (Apple Silicon)** i **Windows 10/11** koja pravi potpun, pro
 
 - **Samo čita.** Claude fajlove nikad ne briše i ne menja.
 - **Proverava sve.** Svaki fajl dobija SHA-256 zbir, a na kraju se ceo backup ponovo pročita i uporedi.
-- **Originalni format + čitljivo.** Tačne kopije koje Claude ume da učita nazad, plus `Pregled.html` i Markdown.
+- **Originalni format + čitljivo.** Tačne kopije koje Claude ume da učita nazad, plus `Overview.html` / `Pregled.html` i Markdown.
 - **Vraćanje samo dodaje.** Fajlovi koje već imaš se ne prepisuju.
 - **Automatski backup.** Dnevno, nedeljno ili mesečno (macOS launchd / Windows Task Scheduler). Ako je računar bio ugašen, backup se napravi čim ga upališ.
-- **Istorija jednog projekta.** Čuva se u `<projekat>/claude-istorija/`, uz `.gitignore` da ne ode na GitHub.
+- **Istorija jednog projekta.** Čuva se u `<projekat>/claude-history/` (na srpskom `claude-istorija/`; ako jedan već postoji, koristi se on), uz `.gitignore` da ne ode na GitHub.
 - **Čuvanje istorije.** Podešava `cleanupPeriodDays` da Claude Code ne briše stare razgovore posle 30 dana.
+- **Dva jezika.** Engleski (podrazumevano) i srpski — prekidač **EN | SR** dole levo u aplikaciji. Važi za ceo interfejs, obaveštenja automatskog backupa, komandnu liniju (`--lang en|sr`) i fajlove za čitanje u novim backupima:
+
+  | | engleski | srpski |
+  |---|---|---|
+  | uputstvo | `README.txt` | `PROCITAJ_ME.txt` |
+  | izveštaj | `report.txt` | `izvestaj.txt` |
+  | pregled | `Overview.html` | `Pregled.html` |
+  | razgovori | `readable-html/`, `readable-md/` | `citljivo-html/`, `citljivo-md/` |
+  | kucane poruke | `typed-prompts.jsonl` | `kucane-poruke.jsonl` |
+
+  Sam format (`original/`, `MANIFEST.json`, `SHA256SUMS.txt`) je isti, pa se backupi na oba jezika proveravaju i vraćaju isto.
 
 ## Instalacija — Mac
 
@@ -55,6 +66,7 @@ A="/Applications/Claude Backup.app/Contents/MacOS/claude-backup"
 "$A" --verify ~/Desktop/ClaudeBackup_….zip
 "$A" --restore ~/Desktop/ClaudeBackup_….zip
 "$A" --schedule daily --at 14:00 --keep 14
+"$A" --list --lang sr        # jezik samo za ovo pokretanje
 ```
 
 Windows (PowerShell):
