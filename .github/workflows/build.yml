@@ -185,12 +185,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TAG="v1.0.${GITHUB_RUN_NUMBER}"
+          set -o pipefail
+          # next free v1.0.N (run numbers restarted once, so they can collide with an older tag)
+          N=$(git ls-remote --tags "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" 'v1.0.*' | sed -n 's|.*refs/tags/v1\.0\.\([0-9]*\)$|\1|p' | sort -n | tail -1)
+          TAG="v1.0.$(( ${N:-0} + 1 ))"
+          echo "tag: $TAG"
           gh release delete latest --cleanup-tag -y 2>/dev/null || true
           gh release create "$TAG" art/macos/Claude-Backup-AppleSilicon.dmg art/windows/Claude-Backup-Windows-Setup.exe \
             --target "$GITHUB_SHA" \
             --title "Claude Backup $TAG" \
-            --notes "Build iz ${GITHUB_SHA::7}. Mac (Apple Silicon): .dmg ili install.sh. Windows 10/11: Setup.exe. Uputstvo je u README.md." \
+            --notes "Build ${GITHUB_SHA::7}. Mac (Apple Silicon): .dmg or install.sh. Windows 10/11: Setup.exe. See README.md." \
             --latest | tee release.txt
 
       - name: Status u granu ci-status
